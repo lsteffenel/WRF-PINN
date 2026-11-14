@@ -58,6 +58,13 @@ WORKDIR /opt/WRF
 # option 34 = x86_64 Linux, gfortran, dmpar (MPI)
 RUN echo 34 | ./configure
 
+# Retirer les flags LTO propages par les wrappers Debian (h5fc/nf-config) dans
+# NETCDF4_DEP_LIB : le plugin LTO de gfortran-12 ne sait pas relire le bytecode
+# gcc-13 des bibliotheques Debian -> symboles non resolus au link de wrf.exe.
+RUN sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g; s/ -flto / /g; s/-flto//g' \
+        configure.wrf \
+    && grep -n "flto" configure.wrf || echo "configure.wrf: aucun flag flto restant"
+
 RUN ./compile em_real > compile.log 2>&1 \
     || { tail -n 100 compile.log; exit 1; }
 
@@ -67,7 +74,9 @@ RUN test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe" \
     || { echo 'ECHEC: main/wrf.exe absent'; \
          grep -nE "undefined reference|collect2|cannot find" compile.log | tail -n 20; \
          echo '--- erreurs de compilation (non ignorees) ---'; \
-         grep -n "Error" compile.log | grep -v ignored | tail -n 20; exit 1; }
+         grep -n "Error" compile.log | grep -v ignored | tail -n 20; \
+         echo '--- flags flto dans compile.log ---'; \
+         grep -n "flto" compile.log | head -n 5; exit 1; }
 
 # ---- WPS (optionnel : prétraitement de cas réels) ----
 WORKDIR /opt
