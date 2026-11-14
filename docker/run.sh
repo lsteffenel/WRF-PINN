@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Lancement du conteneur WRF avec les données montées depuis /mnt/2ToDisk
+# Lancement du conteneur WRF avec les données montées depuis /mnt/3ToDisk
 # Usage: docker/run.sh [repertoire-de-travail-sur-hote]
 set -euo pipefail
-HOST_DIR="${1:-/mnt/2ToDisk/WRF-PINN}"
+HOST_DIR="${1:-/mnt/3ToDisk/angelo/WRF-PINN}"
 mkdir -p "${HOST_DIR}/runs" "${HOST_DIR}/data"
 docker run -it --rm \
   --name wrf-pinn \

@@ -4,7 +4,7 @@
 
 - Ubuntu 24.04 LTS, 2× Xeon Silver 4214R (2 sockets × 12 cœurs, 48 threads), 64 Go RAM
 - GPUs : RTX 3070 (8 Go) + Quadro P2200 — inutiles pour WRF (CPU + MPI), utiles plus tard pour l'entraînement NN
-- **`/` est plein à 94 % (13,5 Go libres)** → tout installer sur `/mnt/2ToDisk` (235 Go libres)
+- **`/` est plein à 94 % (13,5 Go libres)** → tout installer sur `/mnt/3ToDisk` (repo cloné dans `/mnt/3ToDisk/angelo/WRF-PINN`) ; `/mnt/2ToDisk` reste disponible pour les données volumineuses (geodata, sorties)
 - Ubuntu 24.04 = gfortran 13 par défaut ; **utiliser gfortran-12** pour WRF (moins de surprises)
 - Driver NVIDIA 550 / CUDA 12.4 : OK pour PyTorch plus tard
 
@@ -33,8 +33,7 @@ sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart doc
 ### Build et exécution
 
 ```bash
-git clone https://github.com/lsteffenel/WRF-PINN.git /mnt/2ToDisk/WRF-PINN
-cd /mnt/2ToDisk/WRF-PINN
+cd /mnt/3ToDisk/angelo/WRF-PINN
 docker/build.sh                 # build WRF v4.6.0 + WPS (20-45 min)
 docker/run.sh                   # shell dans le conteneur, /opt/runs monté sur l'hôte
 ```
@@ -54,7 +53,7 @@ sudo apt-get install -y build-essential gfortran-12 mpich libmpich-dev \
 export FC=gfortran-12 F77=gfortran-12 CC=gcc
 export NETCDF=/usr HDF=/usr
 
-cd /mnt/2ToDisk
+cd /mnt/3ToDisk
 git clone --depth 1 --branch v4.6.0 https://github.com/wrf-model/WRF.git
 cd WRF && echo 34 | ./configure     # x86_64, gfortran, dmpar
 ./compile em_real 2>&1 | tee compile.log
@@ -64,13 +63,13 @@ cd WRF && echo 34 | ./configure     # x86_64, gfortran, dmpar
 WPS (pour les cas réels, données GFS/ERA5) :
 
 ```bash
-cd /mnt/2ToDisk
+cd /mnt/3ToDisk
 git clone --depth 1 --branch v4.6.0 https://github.com/wrf-model/WPS.git
 cd WPS && echo 1 | ./configure && ./compile 2>&1 | tee compile.log
 ```
 
 Geodata WPS (~30 Go, optionnel pour un premier profilage avec un cas de test fourni) :
-`https://www2.mmm.ucar.edu/wrf/users/download/get-sources-wps-geodata.html` → à décompresser dans `/mnt/2ToDisk/WPS/geog`.
+`https://www2.mmm.ucar.edu/wrf/users/download/get-sources-wps-geodata.html` → à décompresser dans `/mnt/3ToDisk/WPS/geog`.
 
 ## Profilage (étape suivante du plan, cf. `docs/CONTEXTE.md`)
 
