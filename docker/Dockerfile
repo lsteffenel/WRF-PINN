@@ -24,12 +24,12 @@ ENV FC=gfortran F77=gfortran F90=gfortran CC=gcc CXX=g++
 # ---- Pile NetCDF C + Fortran construite depuis les sources (sans LTO) ----
 # Les paquets noble (libnetcdff) produisent des "undefined reference nf_*" au
 # link WRF ; on construit une pile netcdf propre dans /opt/libs.
-ENV LIBS=/opt/libs
+# NB: ne pas nommer cette variable LIBS (variable autoconf reservee)
 RUN mkdir -p /opt/src && cd /opt/src \
     && curl -sSL -o netcdf-c.tar.gz \
        https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDFC_VERSION}.tar.gz \
     && tar xzf netcdf-c.tar.gz && cd netcdf-c-${NETCDFC_VERSION} \
-    && ./configure --prefix=${LIBS} --disable-dap --enable-netcdf-4 \
+    && ./configure --prefix=/opt/libs --disable-dap --enable-netcdf-4 \
        --with-hdf5=/usr/lib/x86_64-linux-gnu/hdf5/serial \
     && make -j"$(nproc)" > /dev/null && make install
 
@@ -37,13 +37,13 @@ RUN cd /opt/src \
     && curl -sSL -o netcdf-fortran.tar.gz \
        https://github.com/Unidata/netcdf-fortran/archive/refs/tags/v${NETCDFF_VERSION}.tar.gz \
     && tar xzf netcdf-fortran.tar.gz && cd netcdf-fortran-${NETCDFF_VERSION} \
-    && CPPFLAGS="-I${LIBS}/include" LDFLAGS="-L${LIBS}/lib" \
-       ./configure --prefix=${LIBS} \
+    && CPPFLAGS="-I/opt/libs/include" LDFLAGS="-L/opt/libs/lib" \
+       ./configure --prefix=/opt/libs \
     && make -j"$(nproc)" > /dev/null && make install
 
-RUN test -f ${LIBS}/lib/libnetcdff.so && ${LIBS}/bin/nc-config --has-hdf5
+RUN test -f /opt/libs/lib/libnetcdff.so && /opt/libs/bin/nc-config --has-hdf5
 
-ENV NETCDF=${LIBS} PATH=${LIBS}/bin:$PATH
+ENV NETCDF=/opt/libs PATH=/opt/libs/bin:$PATH
 
 WORKDIR /opt
 
