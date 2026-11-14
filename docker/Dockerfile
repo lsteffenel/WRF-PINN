@@ -10,16 +10,18 @@ ARG BUILD_WPS=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential gfortran m4 csh \
+        build-essential gfortran gfortran-12 m4 csh \
         mpich libmpich-dev \
         libhdf5-dev libzip-dev libcurl4-openssl-dev libxml2-dev \
         libpng-dev libjpeg-dev zlib1g-dev \
         pkg-config git curl ca-certificates file time \
     && rm -rf /var/lib/apt/lists/*
 
-# GFortran 13 (défaut Ubuntu 24.04), supporté par WRF v4.6.0
-# (-fallow-argument-mismatch -fallow-invalid-boz ajoutés par configure)
-ENV FC=gfortran F77=gfortran F90=gfortran CC=gcc CXX=g++
+# GFortran 12 : connu-bon pour WRF v4.6.0. Utilisable maintenant que la pile
+# netcdf est construite par nous sans LTO (le problème initial venait de la
+# libnetcdff des paquets noble, pas de gfortran-12). gfortran-13 compile mal
+# certains fichiers WRF (symboles internes manquants au link final).
+ENV FC=gfortran-12 F77=gfortran-12 F90=gfortran-12 CC=gcc CXX=g++
 
 # ---- Pile NetCDF C + Fortran construite depuis les sources (sans LTO) ----
 # Les paquets noble (libnetcdff) produisent des "undefined reference nf_*" au
@@ -63,7 +65,9 @@ RUN tail -n 40 compile.log || true
 
 RUN test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe" \
     || { echo 'ECHEC: main/wrf.exe absent'; \
-         grep -nE "undefined reference|collect2|cannot find" compile.log | tail -n 40; exit 1; }
+         grep -nE "undefined reference|collect2|cannot find" compile.log | tail -n 20; \
+         echo '--- erreurs de compilation (non ignorees) ---'; \
+         grep -n "Error" compile.log | grep -v ignored | tail -n 20; exit 1; }
 
 # ---- WPS (optionnel : prétraitement de cas réels) ----
 WORKDIR /opt
