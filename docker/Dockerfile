@@ -3,7 +3,11 @@
 # (durée: 40-60 min; logs: /opt/WRF/compile.log, /opt/WPS/compile.log)
 FROM ubuntu:24.04
 
-ARG WRF_VERSION=v4.6.0
+# v4.6.1 requis : corrige le bug de link de v4.6.0 (PR wrf-model/WRF#2069 :
+# subroutines externes de module_dm - solve_interface, med_interp_domain,
+# wrf_fddaobs_in... - mal compilees dans le fichier geant module_dm.F)
+ARG WRF_VERSION=v4.6.1
+ARG WPS_VERSION=v4.6.0
 ARG NETCDFC_VERSION=4.9.2
 ARG NETCDFF_VERSION=4.6.1
 ARG BUILD_WPS=1
@@ -81,7 +85,7 @@ RUN test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe" \
 # ---- WPS (optionnel : prétraitement de cas réels) ----
 WORKDIR /opt
 RUN if [ "${BUILD_WPS}" = "1" ]; then \
-        git clone --depth 1 --branch ${WRF_VERSION} https://github.com/wrf-model/WPS.git; \
+        git clone --depth 1 --branch ${WPS_VERSION} https://github.com/wrf-model/WPS.git; \
     fi
 
 WORKDIR /opt/WPS
