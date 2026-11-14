@@ -31,7 +31,10 @@ RUN echo 34 | ./configure
 RUN ./compile em_real > compile.log 2>&1 \
     || { tail -n 100 compile.log; exit 1; }
 
-RUN test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe"
+RUN tail -n 80 compile.log || true
+
+RUN test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe" \
+    || { echo 'ECHEC: main/wrf.exe absent'; grep -n -i 'error' compile.log | tail -n 40; exit 1; }
 
 # ---- WPS (optionnel : prétraitement de cas réels) ----
 WORKDIR /opt
