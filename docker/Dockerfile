@@ -8,7 +8,7 @@ ARG BUILD_WPS=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential gfortran gfortran-12 m4 \
+        build-essential gfortran gfortran-12 m4 csh \
         mpich libmpich-dev \
         libnetcdf-dev libnetcdff-dev \
         libpng-dev libjpeg-dev zlib1g-dev \
