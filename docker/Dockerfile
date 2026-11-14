@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         mpich libmpich-dev \
         libnetcdf-dev libnetcdff-dev \
         libpng-dev libjpeg-dev zlib1g-dev \
-        libjasper-dev liblcms2-dev \
         pkg-config git curl ca-certificates file time \
     && rm -rf /var/lib/apt/lists/*
 
