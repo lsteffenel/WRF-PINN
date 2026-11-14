@@ -29,15 +29,17 @@ RUN mkdir -p /opt/src && cd /opt/src \
     && curl -sSL -o netcdf-c.tar.gz \
        https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDFC_VERSION}.tar.gz \
     && tar xzf netcdf-c.tar.gz && cd netcdf-c-${NETCDFC_VERSION} \
-    && ./configure --prefix=/opt/libs --disable-dap --enable-netcdf-4 \
-       --with-hdf5=/usr/lib/x86_64-linux-gnu/hdf5/serial \
+    && CPPFLAGS="-I/usr/include/hdf5/serial" \
+       LDFLAGS="-L/usr/lib/x86_64-linux-gnu/hdf5/serial" \
+       ./configure --prefix=/opt/libs --disable-dap --enable-netcdf-4 \
     && make -j"$(nproc)" > /dev/null && make install
 
 RUN cd /opt/src \
     && curl -sSL -o netcdf-fortran.tar.gz \
        https://github.com/Unidata/netcdf-fortran/archive/refs/tags/v${NETCDFF_VERSION}.tar.gz \
     && tar xzf netcdf-fortran.tar.gz && cd netcdf-fortran-${NETCDFF_VERSION} \
-    && CPPFLAGS="-I/opt/libs/include" LDFLAGS="-L/opt/libs/lib" \
+    && CPPFLAGS="-I/opt/libs/include -I/usr/include/hdf5/serial" \
+       LDFLAGS="-L/opt/libs/lib -L/usr/lib/x86_64-linux-gnu/hdf5/serial" \
        ./configure --prefix=/opt/libs \
     && make -j"$(nproc)" > /dev/null && make install
 
