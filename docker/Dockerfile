@@ -15,8 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         pkg-config git curl ca-certificates file time \
     && rm -rf /var/lib/apt/lists/*
 
-# GFortran 12 : plus sûr que le gfortran 13 par défaut d'Ubuntu 24.04 pour WRF
-ENV FC=gfortran-12 F77=gfortran-12 F90=gfortran-12 CC=gcc CXX=g++ \
+# GFortran 13 (défaut Ubuntu 24.04) : obligatoire pour linker avec libnetcdff
+# system, qui est compilee avec LTO par gfortran 13 (-flto=auto). Un gfortran 12
+# ne peut pas relire ces objets LTO -> "undefined reference to nf_strerror_".
+ENV FC=gfortran F77=gfortran F90=gfortran CC=gcc CXX=g++ \
     NETCDF=/usr HDF=/usr
 
 WORKDIR /opt
