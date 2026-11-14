@@ -18,7 +18,7 @@
 
 **Limites (mineures)** :
 - `perf`/tracing noyau nécessite des droits étendus (`--cap-add SYS_ADMIN --security-opt seccomp=unconfined`) ; **gprof fonctionne sans privilège** → on profile avec `-pg` + gprof
-- Les données volumineuses restent sur l'hôte via bind mount (`/mnt/2ToDisk`)
+- Les données volumineuses restent sur l'hôte via bind mount (`/mnt/3ToDisk`, ou `/mnt/2ToDisk` pour les geodata/sorties volumineuses)
 
 ### Installation Docker (hôte)
 
