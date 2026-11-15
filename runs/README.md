@@ -22,6 +22,11 @@ Cas fournis :
   (paire de runs `ra_lw/ra_sw_physics = 4` vs `0`, `radt=10`) ; les timings WRF sont
   dans `rsl.out.0000` (« Timing for main ... on domain 1 »), cf. `docs/CONTEXTE.md` §5.1.
 
+Piège : avec la radiation active, `wrf.exe` lit `RRTMG_LW_DATA`, `RRTMG_SW_DATA`,
+`ozone*`, `aerosol*`, `*.TBL` **dans le répertoire courant** (sinon un rang MPI meurt,
+exit code 2). Le `run.sh` de `rrtmg_on_off` les symlink automatiquement depuis
+`/comsoftware/wrf/WRF-4.6.1/run/`.
+
 Pour les cas réels (WPS 4.6) : déposer le package géog **V4** (low-res pour les tests,
 high-res ~29 Go pour la production) dans `<repo>/data/WPS_GEOG` et mettre
 `geog_data_path = '/opt/data/WPS_GEOG'` dans `namelist.wps`. Un WPS_GEOG V3 n'est PAS

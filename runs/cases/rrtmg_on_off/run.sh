@@ -30,6 +30,14 @@ for v in rad_on rad_off; do
   cp "$BASE"/wrfinput_d01 . 2>/dev/null || true
   cp "$BASE"/wrfbdy_d01   . 2>/dev/null || true
   cp "$CASE_DIR/namelist.input.$v" namelist.input
+  # wrf.exe lit les fichiers de donnees DANS LE CWD : avec la radiation RRTMG
+  # active (ra_lw/sw_physics=4), il faut RRTMG_LW_DATA, RRTMG_SW_DATA, ozone*,
+  # aerosol*, *.TBL... -> liens depuis $WRF_HOME/run (hors namelist.input/exes)
+  for f in "$WRF_HOME"/run/*; do
+    b="$(basename "$f")"
+    case "$b" in namelist.input|*.exe|README*) continue ;; esac
+    ln -sf "$f" "$b"
+  done
   # conteneur en root : OpenMPI exige --allow-run-as-root
   mpirun --allow-run-as-root -np "$NP" ./wrf.exe > "wrf.$v.log" 2>&1
   mkdir -p out
