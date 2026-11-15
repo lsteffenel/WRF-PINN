@@ -27,6 +27,10 @@ Piège : avec la radiation active, `wrf.exe` lit `RRTMG_LW_DATA`, `RRTMG_SW_DATA
 exit code 2). Le `run.sh` de `rrtmg_on_off` les symlink automatiquement depuis
 `/comsoftware/wrf/WRF-4.6.1/run/`.
 
+Analyse : `bash /opt/runs/cases/rrtmg_on_off/analyze.sh [run-dir]` somme les lignes
+« Timing for main » de `rad_on`/`rad_off` (elapsed **par intervalle**, donc on somme)
+et affiche la part radiation = (rad_on − rad_off) / rad_off.
+
 Pour les cas réels (WPS 4.6) : déposer le package géog **V4** (low-res pour les tests,
 high-res ~29 Go pour la production) dans `<repo>/data/WPS_GEOG` et mettre
 `geog_data_path = '/opt/data/WPS_GEOG'` dans `namelist.wps`. Un WPS_GEOG V3 n'est PAS
