@@ -61,25 +61,38 @@ RUN cd WPS-${WPS_VERSION} \
 # Les paquets conda-forge sont construits sur une baseline CentOS 7 : Python recent,
 # stack scientifique (generation de donnees) et PyTorch (developpement du modele)
 # s'installent sans toucher au systeme de base.
+# Environnement "pinn" cree dans /opt/conda/envs/pinn via le conda de la base
+# Miniforge (un env conda ne contient pas l'executable conda lui-meme : la base
+# reste donc en place pour l'outil, seul le cache pkgs est purge a la fin).
+#  - matplotlib-base au lieu de matplotlib : le metapaquet matplotlib tire
+#    qt6-main + pyside6 (~70 Mo) inutiles en headless ; matplotlib-base suffit
+#    pour matplotlib.use('Agg').
 # Build GPU pour l'entrainement du PINN (RTX 3070, driver NVIDIA 550 / CUDA 12.4) :
 # sur conda-forge, la variante CUDA de pytorch se selectionne via le paquet virtuel
-# __cuda (le meta-paquet pytorch-cuda a ete SUPPRIME de conda-forge ; "pytorch-gpu"
-# n'existe que sur le canal "pytorch" d'Anaconda). Au build il n'y a pas de GPU :
-# CONDA_OVERRIDE_CUDA=12.4 force __cuda=12.4 (driver 550 = CUDA 12.4 max) et
-# CONDA_OVERRIDE_CUDA_ARCH=8.6 (RTX 3070, sm_86) ; "pytorch=*=cuda*" exige la
-# variante CUDA (sinon le solveur prendrait la variante CPU sans driver detecte)
-# et cuda-version=12.4 epingle les libs NVIDIA a 12.4.
+# __cuda. Au build il n'y a pas de GPU : CONDA_OVERRIDE_CUDA=12.4 force __cuda=12.4
+# (driver 550 = CUDA 12.4 max) ; "pytorch=*=cuda*" exige la variante CUDA (sinon le
+# solveur prendrait la variante CPU sans driver detecte) et cuda-version=12.4 epingle
+# les libs NVIDIA a 12.4.
+# NOTE : les builds conda-forge de pytorch sont compiles contre le toolkit CUDA 12.0
+# (build string "cuda120"), donc torch.version.cuda == '12.0' meme avec des libs
+# NVIDIA 12.4. C'est correct et compatible au runtime : un binaire CUDA 12.0 tourne
+# avec un driver 550 (compatibilite descendante CUDA minor garantie). La variante
+# CPU, elle, donnerait torch.version.cuda is None : c'est ce qu'on verifie.
 # Lancer le conteneur avec --gpus all (nvidia-container-toolkit, cf. docs/INSTALL.md).
 RUN curl -sSL -o /tmp/miniforge.sh \
        https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh \
     && bash /tmp/miniforge.sh -b -p /opt/conda && rm /tmp/miniforge.sh \
     && CONDA_OVERRIDE_CUDA=12.4 CONDA_OVERRIDE_CUDA_ARCH=8.6 \
-       /opt/conda/bin/conda install -y -c conda-forge \
-       python=3.11 numpy xarray netcdf4 h5py matplotlib pandas scipy "pytorch=*=cuda*" cuda-version=12.4 \
+       /opt/conda/bin/conda create -y -c conda-forge -n pinn \
+       python=3.11 numpy xarray netcdf4 h5py matplotlib-base \
+       pandas scipy "pytorch=*=cuda*" cuda-version=12.4 \
+    || { echo 'ECHEC: conda create (voir log ci-dessus)'; exit 1; } \
     && /opt/conda/bin/conda clean -ya > /dev/null \
-    && /opt/conda/bin/python -c "import torch, xarray, netCDF4, h5py; assert torch.version.cuda == '12.4', 'variante CPU installee au lieu de CUDA !'; print('OK: PyTorch', torch.__version__, '| build CUDA', torch.version.cuda, '| cuda dispo (build sans GPU):', torch.cuda.is_available())"
+    && { /opt/conda/bin/conda list -n pinn pytorch | grep -qE 'cuda[0-9]+' \
+         || { echo 'ECHEC: variante CPU installee au lieu de CUDA !'; exit 1; }; } \
+    && /opt/conda/envs/pinn/bin/python -c "import torch, xarray, netCDF4, h5py, matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot; assert torch.version.cuda is not None, 'variante CPU installee au lieu de CUDA !'; print('OK: PyTorch', torch.__version__, '| build CUDA', torch.version.cuda, '| cuda dispo (build sans GPU):', torch.cuda.is_available())"
 
-ENV PATH /opt/conda/bin:$PATH
+ENV PATH /opt/conda/envs/pinn/bin:/opt/conda/bin:$PATH
 ENV LD_LIBRARY_PATH /usr/lib64/openmpi/lib:/comsoftware/libs/netcdf/lib
 ENV PATH /usr/lib64/openmpi/bin:$PATH
 ENV OMP_NUM_THREADS=1
