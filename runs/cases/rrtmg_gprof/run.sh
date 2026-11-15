@@ -27,12 +27,14 @@ for f in "$WRF_HOME"/run/*; do
 done
 ./ideal.exe > ideal.log 2>&1
 # conteneur en root : OpenMPI exige --allow-run-as-root
-mpirun --allow-run-as-root -np "$NP" ./wrf.exe > wrf.log 2>&1
-# gmon.out par rang MPI : on les fusionne (gprof -s) avant le profil
-gprof -s ./wrf.exe gmon.out* -o gmon.sum 2>/dev/null || cp -f gmon.out.0000 gmon.sum
-gprof ./wrf.exe gmon.sum > gprof.txt
+# GMON_OUT_PREFIX -> un fichier gmon.out-<pid> PAR RANG MPI (sinon ils s'ecrasent)
+export GMON_OUT_PREFIX=gmon.out
+mpirun --allow-run-as-root -x GMON_OUT_PREFIX -np "$NP" ./wrf.exe > wrf.log 2>&1
+ls gmon.out* > /dev/null 2>&1 || { echo "ECHEC: aucun gmon.out* produit -> wrf.exe non compile avec -pg (rebuild: docker/build.sh gprof)"; exit 1; }
+# gprof somme directement tous les fichiers indiques
+gprof ./wrf.exe gmon.out* > gprof.txt
 mkdir -p out
-mv -f rsl.* wrfout* gmon.out* gmon.sum gprof.txt out/ 2>/dev/null || true
+mv -f rsl.* wrfout* gmon.out* gprof.txt out/ 2>/dev/null || true
 echo "OK: run gprof termine dans $WORK"
 echo "== top du flat profile (out/gprof.txt) =="
 sed -n '/[Ff]lat profile/,/^$/p' out/gprof.txt | head -20
