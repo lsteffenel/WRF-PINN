@@ -60,7 +60,9 @@ RUN git clone --depth 1 --branch ${WRF_VERSION} https://github.com/wrf-model/WRF
 
 WORKDIR /opt/WRF
 # option 34 = x86_64 Linux, gfortran, dmpar (MPI)
-RUN echo 34 | ./configure
+# puis 1 = nesting "basic" (indispensable pour em_real : sans lui, les fichiers
+# de nesting ne sont pas compiles -> undefined references au link)
+RUN printf '34\n1\n' | ./configure
 
 # Retirer les flags LTO propages par les wrappers Debian (h5fc/nf-config) dans
 # NETCDF4_DEP_LIB : le plugin LTO de gfortran-12 ne sait pas relire le bytecode
