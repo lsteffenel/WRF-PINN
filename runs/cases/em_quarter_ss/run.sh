@@ -12,6 +12,9 @@ WORK="$RUNS_ROOT/cases/em_quarter_ss/run-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$WORK"
 cd "$WORK"
 ln -sf "$WRF_HOME/main/ideal.exe" "$WRF_HOME/main/wrf.exe" .
+# -x est faux sur un lien symbolique mort : on detecte un binaire absent
+[ -x ./ideal.exe ] || { echo "ECHEC: $WRF_HOME/main/ideal.exe absent (image compilee sans la cible idealisee em_quarter_ss) - reconstruire l'image"; exit 1; }
+[ -x ./wrf.exe ]   || { echo "ECHEC: $WRF_HOME/main/wrf.exe absent"; exit 1; }
 cp "$WRF_HOME/test/em_quarter_ss/input_sounding" .
 cp "$CASE_DIR/namelist.input" .
 ./ideal.exe > ideal.log 2>&1
