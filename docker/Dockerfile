@@ -55,15 +55,20 @@ RUN cd WRF-${WRF_VERSION} \
          grep -nE "undefined reference|collect2|cannot find|Error" compile.log compile_quarter_ss.log 2>/dev/null | grep -v ignored | tail -n 30; exit 1; }
 
 # ---- Variante gprof (optionnelle, BUILD_GPROF=1) : binaires *-pg en *.gprof ----
+# PIege : make ne depend pas de configure.wrf pour les .o -> un simple recompile apres
+# le sed reutilise les objets SANS -pg (pas de gmon.out au run). On touche donc toutes
+# les sources pour forcer la recompilation complete, et on verifie mcount dans le binaire.
 RUN cd WRF-${WRF_VERSION} \
     && cp -f main/wrf.exe /tmp/wrf.exe.rel && cp -f main/ideal.exe /tmp/ideal.exe.rel \
     && if [ "${BUILD_GPROF}" = "1" ]; then \
          sed -i -e 's/^FCOPTIM[[:space:]]*=/& -pg/' -e 's/^LDFLAGS[[:space:]]*=/& -pg/' configure.wrf \
+         && find . \( -name '*.F' -o -name '*.f' -o -name '*.f90' -o -name '*.c' \) -exec touch {} + \
          && export NETCDF=/comsoftware/libs/netcdf/ JASPERINC=/usr/include/jasper/ JASPERLIB=/usr/lib64/ \
          && /bin/csh ./compile em_quarter_ss > compile_gprof.log 2>&1 \
+         && nm main/wrf.exe | grep -q mcount \
          && mv -f main/wrf.exe main/wrf.exe.gprof && mv -f main/ideal.exe main/ideal.exe.gprof \
          && cp -f /tmp/wrf.exe.rel main/wrf.exe && cp -f /tmp/ideal.exe.rel main/ideal.exe \
-         && test -f main/wrf.exe.gprof && echo "OK: build gprof -> main/wrf.exe.gprof (+ ideal.exe.gprof, binaires rel restaures)"; \
+         && echo "OK: build gprof -> main/wrf.exe.gprof (mcount present, binaires release restaures)"; \
        fi
 
 # ---- WPS : configure option 1 (gfortran serial) ----
