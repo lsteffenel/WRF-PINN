@@ -13,6 +13,11 @@ ARG WPS_VERSION=4.6.0
 # phys/noahmp/{drivers,src,parameters}, le Makefile de WRF echoue (exit 31,
 # "NoahMP submodule files not populating WRF directories") et wrf.exe n'est pas produit.
 ARG NOAHMP_COMMIT=848f54ad3d28c4303151fe5ad83724e232694422
+# Variante profilage gprof : --build-arg BUILD_GPROF=1 (voir docker/build.sh gprof)
+# ajoute -pg a FCOPTIM/LDFLAGS et produit main/wrf.exe.gprof + main/ideal.exe.gprof
+# EN PLUS des binaires normaux (sauvegardes/restores car chaque ./compile em_* ZAPe
+# main/wrf.exe et main/ideal.exe avant de rebuilder).
+ARG BUILD_GPROF=0
 
 USER root
 WORKDIR /comsoftware/wrf
@@ -48,6 +53,18 @@ RUN cd WRF-${WRF_VERSION} \
     && echo "OK: WRF compile -> main/wrf.exe + main/real.exe + main/ideal.exe" \
     || { echo 'ECHEC: main/wrf.exe, main/real.exe ou main/ideal.exe absent'; \
          grep -nE "undefined reference|collect2|cannot find|Error" compile.log compile_quarter_ss.log 2>/dev/null | grep -v ignored | tail -n 30; exit 1; }
+
+# ---- Variante gprof (optionnelle, BUILD_GPROF=1) : binaires *-pg en *.gprof ----
+RUN cd WRF-${WRF_VERSION} \
+    && cp -f main/wrf.exe /tmp/wrf.exe.rel && cp -f main/ideal.exe /tmp/ideal.exe.rel \
+    && if [ "${BUILD_GPROF}" = "1" ]; then \
+         sed -i -e 's/^FCOPTIM[[:space:]]*=/& -pg/' -e 's/^LDFLAGS[[:space:]]*=/& -pg/' configure.wrf \
+         && export NETCDF=/comsoftware/libs/netcdf/ JASPERINC=/usr/include/jasper/ JASPERLIB=/usr/lib64/ \
+         && /bin/csh ./compile em_quarter_ss > compile_gprof.log 2>&1 \
+         && mv -f main/wrf.exe main/wrf.exe.gprof && mv -f main/ideal.exe main/ideal.exe.gprof \
+         && cp -f /tmp/wrf.exe.rel main/wrf.exe && cp -f /tmp/ideal.exe.rel main/ideal.exe \
+         && test -f main/wrf.exe.gprof && echo "OK: build gprof -> main/wrf.exe.gprof (+ ideal.exe.gprof, binaires rel restaures)"; \
+       fi
 
 # ---- WPS : configure option 1 (gfortran serial) ----
 RUN ln -sf WRF-${WRF_VERSION} WRF \
