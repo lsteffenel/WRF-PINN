@@ -47,6 +47,21 @@ RUN cd WPS-${WPS_VERSION} \
     && ls geogrid.exe metgrid.exe ungrib.exe \
     || { echo 'ECHEC: executables WPS absents'; tail -n 30 compile.log; exit 1; }
 
+# ---- Environnement Python pour le PINN (Miniforge, compatible glibc 2.17/CentOS 7) ----
+# Les paquets conda-forge sont construits sur une baseline CentOS 7 : Python recent,
+# stack scientifique (generation de donnees) et PyTorch (developpement du modele)
+# s'installent sans toucher au systeme de base.
+# Pour l'entrainement GPU (RTX 3070, driver 550/CUDA 12.4) : remplacer pytorch-cpu
+# par pytorch-gpu et lancer le conteneur avec --gpus all (nvidia-container-toolkit).
+RUN curl -sSL -o /tmp/miniforge.sh \
+       https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh \
+    && bash /tmp/miniforge.sh -b -p /opt/conda && rm /tmp/miniforge.sh \
+    && /opt/conda/bin/conda install -y -c conda-forge \
+       python=3.11 numpy xarray netcdf4 h5py matplotlib pandas scipy pytorch-cpu \
+    && /opt/conda/bin/conda clean -ya > /dev/null \
+    && /opt/conda/bin/python -c "import torch, xarray, netCDF4, h5py; print('OK: PyTorch', torch.__version__)"
+
+ENV PATH /opt/conda/bin:$PATH
 ENV LD_LIBRARY_PATH /usr/lib64/openmpi/lib:/comsoftware/libs/netcdf/lib
 ENV PATH /usr/lib64/openmpi/bin:$PATH
 ENV OMP_NUM_THREADS=1
