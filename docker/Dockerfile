@@ -8,12 +8,22 @@ FROM dtcenter/common-community-container:1.1
 # WRF v4.6.1 (corrige le bug module_dm de v4.6.0, PR wrf-model/WRF#2069)
 ARG WRF_VERSION=4.6.1
 ARG WPS_VERSION=4.6.0
+# Sous-module git phys/noahmp epingle par WRF v4.6.1 (.gitmodules -> NCAR/noahmp).
+# Les tarballs GitHub auto-generes ne contiennent PAS les sous-modules : sans
+# phys/noahmp/{drivers,src,parameters}, le Makefile de WRF echoue (exit 31,
+# "NoahMP submodule files not populating WRF directories") et wrf.exe n'est pas produit.
+ARG NOAHMP_COMMIT=848f54ad3d28c4303151fe5ad83724e232694422
 
 USER root
 WORKDIR /comsoftware/wrf
 
 RUN curl -SL https://github.com/wrf-model/WRF/archive/v${WRF_VERSION}.tar.gz | tar zxC /comsoftware/wrf \
-    && curl -SL https://github.com/wrf-model/WPS/archive/v${WPS_VERSION}.tar.gz | tar zxC /comsoftware/wrf
+    && curl -SL https://github.com/wrf-model/WPS/archive/v${WPS_VERSION}.tar.gz | tar zxC /comsoftware/wrf \
+    && mkdir -p /comsoftware/wrf/WRF-${WRF_VERSION}/phys/noahmp \
+    && curl -SL https://github.com/NCAR/noahmp/archive/${NOAHMP_COMMIT}.tar.gz \
+       | tar zxC /comsoftware/wrf/WRF-${WRF_VERSION}/phys/noahmp --strip-components=1 \
+    && test -f /comsoftware/wrf/WRF-${WRF_VERSION}/phys/noahmp/drivers/wrf/module_sf_noahmpdrv.F \
+    && test -f /comsoftware/wrf/WRF-${WRF_VERSION}/phys/noahmp/parameters/MPTABLE.TBL
 
 # ---- WRF : etapes identiques a la recette NCAR (options 34 puis 1 au configure) ----
 RUN export NETCDF=/comsoftware/libs/netcdf/ \
