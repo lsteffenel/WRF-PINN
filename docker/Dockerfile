@@ -26,8 +26,12 @@ RUN curl -SL https://github.com/wrf-model/WRF/archive/v${WRF_VERSION}.tar.gz | t
     && test -f /comsoftware/wrf/WRF-${WRF_VERSION}/phys/noahmp/parameters/MPTABLE.TBL
 
 # ---- WRF : etapes identiques a la recette NCAR (options 34 puis 1 au configure) ----
-# em_real -> main/wrf.exe + main/real.exe (cas reels) ; em_ideal -> main/ideal.exe
-# (cas idealises, ex. runs/cases/em_quarter_ss : sans ideal.exe, ./ideal.exe echoue)
+# em_real -> main/wrf.exe + main/real.exe (cas reels), puis em_quarter_ss (cas
+# idealise du smoke test runs/cases/em_quarter_ss) -> main/ideal.exe + liens dans
+# test/em_quarter_ss. ATTENTION : il n'existe PAS de cible "em_ideal" dans le
+# Makefile, et chaque "./compile em_*" supprime d'abord main/wrf.exe (ZAP dans le
+# script compile) : em_quarter_ss depend de la cible "wrf" qui reconstruit
+# main/wrf.exe avant de construire main/ideal.exe, donc les deux coexistent.
 RUN export NETCDF=/comsoftware/libs/netcdf/ \
     && export JASPERINC=/usr/include/jasper/ \
     && export JASPERLIB=/usr/lib64/ \
@@ -36,14 +40,14 @@ RUN export NETCDF=/comsoftware/libs/netcdf/ \
     && sed -i -e '/^DM_CC/ s/$/ -DMPI2_SUPPORT/' configure.wrf \
     && sed -i '/BUILD_RRTMG_FAST/d' configure.wrf \
     && /bin/csh ./compile em_real > compile.log 2>&1 \
-    && /bin/csh ./compile em_ideal > compile_ideal.log 2>&1 \
-    || { tail -n 60 compile.log; tail -n 60 compile_ideal.log 2>/dev/null; exit 1; }
+    && /bin/csh ./compile em_quarter_ss > compile_quarter_ss.log 2>&1 \
+    || { tail -n 60 compile.log; tail -n 60 compile_quarter_ss.log 2>/dev/null; exit 1; }
 
 RUN cd WRF-${WRF_VERSION} \
-    && test -f main/wrf.exe && test -f main/ideal.exe \
-    && echo "OK: WRF compile -> main/wrf.exe + main/ideal.exe" \
-    || { echo 'ECHEC: main/wrf.exe ou main/ideal.exe absent'; \
-         grep -nE "undefined reference|collect2|cannot find|Error" compile.log compile_ideal.log 2>/dev/null | grep -v ignored | tail -n 30; exit 1; }
+    && test -f main/wrf.exe && test -f main/real.exe && test -f main/ideal.exe \
+    && echo "OK: WRF compile -> main/wrf.exe + main/real.exe + main/ideal.exe" \
+    || { echo 'ECHEC: main/wrf.exe, main/real.exe ou main/ideal.exe absent'; \
+         grep -nE "undefined reference|collect2|cannot find|Error" compile.log compile_quarter_ss.log 2>/dev/null | grep -v ignored | tail -n 30; exit 1; }
 
 # ---- WPS : configure option 1 (gfortran serial) ----
 RUN ln -sf WRF-${WRF_VERSION} WRF \
