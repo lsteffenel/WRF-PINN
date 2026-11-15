@@ -41,6 +41,32 @@ docker/run.sh                   # shell dans le conteneur, /opt/runs monté sur 
 
 Dans le conteneur, WRF est dans `/opt/WRF` (`main/wrf.exe` compilé `em_real`) et WPS dans `/opt/WPS`.
 
+### Espace disque (piège constaté au build)
+
+Symptôme : le build s'arrête avec
+`ERROR: failed to solve: Internal: error committing ...: write <data-root>/buildkit/metadata_v2.db: input/output error`
+→ BuildKit n'arrive plus à écrire dans le **data-root Docker** (disque plein ou en défaut).
+
+Diagnostic et remèdes sur l'hôte :
+
+```bash
+df -h /mnt/3ToDisk                 # place restante sur le disque du data-root
+dmesg | tail -30                   # erreurs I/O du disque
+docker system df                   # occupation images / cache / volumes
+docker system prune -af --volumes  # libère images dangling, cache, volumes inutilisés
+docker builder prune -af           # cache BuildKit
+```
+
+Si la place manque : déplacer le data-root sur le grand disque
+(`/etc/docker/daemon.json` : `{ "data-root": "/mnt/2ToDisk/docker-data" }`,
+puis `sudo systemctl restart docker`), puis relancer `docker/build.sh`.
+
+Taille à prévoir : image de base ~0,4 Go compressée, arbre WRF + WPS compilé,
+et depuis la variante GPU `pytorch-cuda=12.4` plusieurs Go de bibliothèques
+NVIDIA CUDA → prévoir **~10 Go libres** avant le build (image finale ~8-10 Go).
+Le Dockerfile nettoie déjà le cache conda (`conda clean -ya`) et les tarballs
+WRF/WPS/NoahMP sont extraits à la volée, jamais stockés.
+
 ## Alternative : installation native (si vous refusez Docker)
 
 Résumé ; les mêmes étapes sont dans le Dockerfile, qui sert de référence.
