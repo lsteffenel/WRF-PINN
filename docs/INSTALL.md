@@ -39,7 +39,19 @@ docker/build.sh                 # build WRF v4.6.0 + WPS (20-45 min)
 docker/run.sh                   # shell dans le conteneur, /opt/runs monté sur l'hôte
 ```
 
-Dans le conteneur, WRF est dans `/opt/WRF` (`main/wrf.exe` compilé `em_real`) et WPS dans `/opt/WPS`.
+Dans le conteneur, WRF est dans `/comsoftware/wrf/WRF-4.6.1` (`main/wrf.exe`, `main/real.exe`, `main/ideal.exe` compilés `em_real`) et WPS dans `/comsoftware/wrf/WPS-4.6.0`. L'environnement Python `pinn` (PyTorch CUDA) est actif via le `PATH` (`python` → `/opt/conda/envs/pinn/bin/python`).
+
+### Premier run dans le conteneur (smoke test, sans WPS_GEOG)
+
+```bash
+./docker/build.sh                        # image wrf-pinn:latest (une fois)
+./docker/run.sh /chemin/vers/WRF-PINN    # conteneur : <repo>/runs monté sur /opt/runs, <repo>/data sur /opt/data
+# dans le conteneur :
+bash /opt/runs/cases/em_quarter_ss/run.sh      # cas idéalisé 42x42x41, 60 min (smoke test)
+NP=16 bash /opt/runs/cases/rrtmg_on_off/run.sh # profilage radiation RRTMG on/off (radt=10)
+```
+
+Les sorties (`rsl.*`, `wrfout*`, logs) tombent dans `runs/cases/<cas>/run-<timestamp>/` côté hôte (ignoré par git). Le cas idéalisé ne nécessite **aucune** donnée WPS_GEOG. Pour les cas réels avec WPS 4.6 : package géog **V4** (low-res pour les tests, high-res ~29 Go en production) dans `<repo>/data/WPS_GEOG`, et `geog_data_path = '/opt/data/WPS_GEOG'` dans `namelist.wps` — un WPS_GEOG V3 n'est pas compatible avec WPS 4.6 par défaut (voir `runs/README.md`).
 
 ## Alternative : installation native (si vous refusez Docker)
 
