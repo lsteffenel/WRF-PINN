@@ -90,7 +90,10 @@ RUN curl -sSL -o /tmp/miniforge.sh \
     && /opt/conda/bin/conda clean -ya > /dev/null \
     && { /opt/conda/bin/conda list -n pinn pytorch | grep -qE 'cuda[0-9]+' \
          || { echo 'ECHEC: variante CPU installee au lieu de CUDA !'; exit 1; }; } \
-    && /opt/conda/envs/pinn/bin/python -c "import torch, xarray, netCDF4, h5py, matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot; assert torch.version.cuda is not None, 'variante CPU installee au lieu de CUDA !'; print('OK: PyTorch', torch.__version__, '| build CUDA', torch.version.cuda, '| cuda dispo (build sans GPU):', torch.cuda.is_available())"
+    && ln -sf /opt/conda/envs/pinn/bin/python /usr/local/bin/python \
+    && ln -sf /opt/conda/envs/pinn/bin/pip /usr/local/bin/pip \
+    && /usr/local/bin/python -c "import torch, xarray, netCDF4, h5py, matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot; assert torch.version.cuda is not None, 'variante CPU installee au lieu de CUDA !'; print('OK: PyTorch', torch.__version__, '| build CUDA', torch.version.cuda, '| cuda dispo (build sans GPU):', torch.cuda.is_available())"
+
 
 ENV PATH /opt/conda/envs/pinn/bin:/opt/conda/bin:$PATH
 ENV LD_LIBRARY_PATH /usr/lib64/openmpi/lib:/comsoftware/libs/netcdf/lib
