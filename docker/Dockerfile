@@ -1,104 +1,55 @@
-# WRF (RRTMG) sur Ubuntu 24.04 — image de build et d'exécution
+# WRF (RRTMG) — recette basee sur le conteneur officiel NCAR/DTC
+# (https://github.com/NCAR/container-dtc-nwp, components/wps_wrf)
+# Base : dtcenter/common-community-container:1.1 — pile preinstallee et eprouvee
+# avec WRF : gfortran + OpenMPI + netcdf + jasper (pas de LTO, pas de paquets noble)
 # Build:  docker build -t wrf-pinn:latest -f docker/Dockerfile .
-# (durée: 40-60 min; logs: /opt/WRF/compile.log, /opt/WPS/compile.log)
-FROM ubuntu:24.04
+FROM dtcenter/common-community-container:1.1
 
-# v4.6.1 requis : corrige le bug de link de v4.6.0 (PR wrf-model/WRF#2069 :
-# subroutines externes de module_dm - solve_interface, med_interp_domain,
-# wrf_fddaobs_in... - mal compilees dans le fichier geant module_dm.F)
-ARG WRF_VERSION=v4.6.1
-ARG WPS_VERSION=v4.6.0
-ARG NETCDFC_VERSION=4.9.2
-ARG NETCDFF_VERSION=4.6.1
-ARG BUILD_WPS=1
-ENV DEBIAN_FRONTEND=noninteractive
+# WRF v4.6.1 (corrige le bug module_dm de v4.6.0, PR wrf-model/WRF#2069)
+ARG WRF_VERSION=4.6.1
+ARG WPS_VERSION=4.6.0
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential gfortran gfortran-12 m4 csh \
-        mpich libmpich-dev \
-        libhdf5-dev libzip-dev libcurl4-openssl-dev libxml2-dev \
-        libpng-dev libjpeg-dev zlib1g-dev \
-        pkg-config git curl ca-certificates file time \
-    && rm -rf /var/lib/apt/lists/*
+USER root
+WORKDIR /comsoftware/wrf
 
-# GFortran 12 : connu-bon pour WRF v4.6.0. Utilisable maintenant que la pile
-# netcdf est construite par nous sans LTO (le problème initial venait de la
-# libnetcdff des paquets noble, pas de gfortran-12). gfortran-13 compile mal
-# certains fichiers WRF (symboles internes manquants au link final).
-ENV FC=gfortran-12 F77=gfortran-12 F90=gfortran-12 CC=gcc CXX=g++
+RUN curl -SL https://github.com/wrf-model/WRF/archive/v${WRF_VERSION}.tar.gz | tar zxC /comsoftware/wrf \
+    && curl -SL https://github.com/wrf-model/WPS/archive/v${WPS_VERSION}.tar.gz | tar zxC /comsoftware/wrf
 
-# ---- Pile NetCDF C + Fortran construite depuis les sources (sans LTO) ----
-# Les paquets noble (libnetcdff) produisent des "undefined reference nf_*" au
-# link WRF ; on construit une pile netcdf propre dans /opt/libs.
-# NB: ne pas nommer cette variable LIBS (variable autoconf reservee)
-RUN mkdir -p /opt/src && cd /opt/src \
-    && curl -sSL -o netcdf-c.tar.gz \
-       https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDFC_VERSION}.tar.gz \
-    && tar xzf netcdf-c.tar.gz && cd netcdf-c-${NETCDFC_VERSION} \
-    && CPPFLAGS="-I/usr/include/hdf5/serial" \
-       LDFLAGS="-L/usr/lib/x86_64-linux-gnu/hdf5/serial" \
-       ./configure --prefix=/opt/libs --disable-dap --enable-netcdf-4 \
-    && make -j"$(nproc)" > /dev/null && make install
+# ---- WRF : etapes identiques a la recette NCAR (options 34 puis 1 au configure) ----
+RUN export NETCDF=/comsoftware/libs/netcdf/ \
+    && export JASPERINC=/usr/include/jasper/ \
+    && export JASPERLIB=/usr/lib64/ \
+    && cd WRF-${WRF_VERSION} \
+    && ./configure <<< $'34\r1\r' \
+    && sed -i -e '/^DM_CC/ s/$/ -DMPI2_SUPPORT/' configure.wrf \
+    && sed -i '/BUILD_RRTMG_FAST/d' configure.wrf \
+    && /bin/csh ./compile em_real > compile.log 2>&1 \
+    || { tail -n 60 compile.log; exit 1; }
 
-RUN cd /opt/src \
-    && curl -sSL -o netcdf-fortran.tar.gz \
-       https://github.com/Unidata/netcdf-fortran/archive/refs/tags/v${NETCDFF_VERSION}.tar.gz \
-    && tar xzf netcdf-fortran.tar.gz && cd netcdf-fortran-${NETCDFF_VERSION} \
-    && CPPFLAGS="-I/opt/libs/include -I/usr/include/hdf5/serial" \
-       LDFLAGS="-L/opt/libs/lib -L/usr/lib/x86_64-linux-gnu/hdf5/serial" \
-       ./configure --prefix=/opt/libs \
-    && make -j"$(nproc)" > /dev/null && make install
-
-RUN test -f /opt/libs/lib/libnetcdff.so && /opt/libs/bin/nc-config --has-hdf5
-
-ENV NETCDF=/opt/libs PATH=/opt/libs/bin:$PATH
-
-WORKDIR /opt
-
-# ---- WRF ----
-RUN git clone --depth 1 --branch ${WRF_VERSION} https://github.com/wrf-model/WRF.git
-
-WORKDIR /opt/WRF
-# option 34 = x86_64 Linux, gfortran, dmpar (MPI)
-# puis 1 = nesting "basic" (indispensable pour em_real : sans lui, les fichiers
-# de nesting ne sont pas compiles -> undefined references au link)
-RUN printf '34\n1\n' | ./configure
-
-# Retirer les flags LTO propages par les wrappers Debian (h5fc/nf-config) dans
-# NETCDF4_DEP_LIB : le plugin LTO de gfortran-12 ne sait pas relire le bytecode
-# gcc-13 des bibliotheques Debian -> symboles non resolus au link de wrf.exe.
-RUN sed -i 's/-flto=auto//g; s/-ffat-lto-objects//g; s/ -flto / /g; s/-flto//g' \
-        configure.wrf \
-    && grep -n "flto" configure.wrf || echo "configure.wrf: aucun flag flto restant"
-
-RUN ./compile em_real > compile.log 2>&1 \
-    || { tail -n 100 compile.log; exit 1; }
-
-RUN tail -n 40 compile.log || true
-
-RUN test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe" \
+RUN cd WRF-${WRF_VERSION} \
+    && test -f main/wrf.exe && echo "OK: WRF compile -> main/wrf.exe" \
     || { echo 'ECHEC: main/wrf.exe absent'; \
-         grep -nE "undefined reference|collect2|cannot find" compile.log | tail -n 20; \
-         echo '--- erreurs de compilation (non ignorees) ---'; \
-         grep -n "Error" compile.log | grep -v ignored | tail -n 20; \
-         echo '--- flags flto dans compile.log ---'; \
-         grep -n "flto" compile.log | head -n 5; exit 1; }
+         grep -nE "undefined reference|collect2|cannot find|Error" compile.log | grep -v ignored | tail -n 30; exit 1; }
 
-# ---- WPS (optionnel : prétraitement de cas réels) ----
-WORKDIR /opt
-RUN if [ "${BUILD_WPS}" = "1" ]; then \
-        git clone --depth 1 --branch ${WPS_VERSION} https://github.com/wrf-model/WPS.git; \
-    fi
+# ---- WPS : configure option 1 (gfortran serial) ----
+RUN ln -sf WRF-${WRF_VERSION} WRF \
+    && cd WPS-${WPS_VERSION} \
+    && export NETCDF=/comsoftware/libs/netcdf/ \
+    && export JASPERINC=/usr/include/jasper/ \
+    && export JASPERLIB=/usr/lib64/ \
+    && export WRF_DIR=/comsoftware/wrf/WRF-${WRF_VERSION} \
+    && ./configure <<< $'1\r' \
+    && sed -i -e 's/-L$(NETCDF)\/lib/-L$(NETCDF)\/lib -lnetcdff /' configure.wps \
+    && /bin/csh ./compile > compile.log 2>&1 \
+    || { tail -n 60 compile.log; exit 1; }
 
-WORKDIR /opt/WPS
-RUN if [ "${BUILD_WPS}" = "1" ]; then \
-        export WRF_DIR=/opt/WRF && \
-        echo 1 | ./configure && \
-        ./compile > compile.log 2>&1 \
-        || { tail -n 100 compile.log; exit 1; }; \
-    fi
+RUN cd WPS-${WPS_VERSION} \
+    && ls geogrid.exe metgrid.exe ungrib.exe \
+    || { echo 'ECHEC: executables WPS absents'; tail -n 30 compile.log; exit 1; }
 
-WORKDIR /opt/WRF
+ENV LD_LIBRARY_PATH /usr/lib64/openmpi/lib:/comsoftware/libs/netcdf/lib
+ENV PATH /usr/lib64/openmpi/bin:$PATH
 ENV OMP_NUM_THREADS=1
-# mpich dans le conteneur : mpirun single-machine (48 cœurs OK)
+WORKDIR /comsoftware/wrf/WRF-${WRF_VERSION}
+# openmpi dans le conteneur : mpirun single-machine (48 cœurs OK)
 ENTRYPOINT ["/bin/bash"]
