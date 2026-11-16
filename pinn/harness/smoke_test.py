@@ -48,7 +48,7 @@ def main():
     play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2 = standard_profile()
     n = len(play)
 
-    taug_sw, taur_sw = r.taumol_sw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, cossza=0.5)
+    taug_sw, taur_sw = r.taumol_sw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
     assert taug_sw.shape == (n, NGPTSW) and np.all(np.isfinite(taug_sw)) and taug_sw.sum() > 0
     assert taur_sw.shape == (n, NGPTSW) and np.all(np.isfinite(taur_sw)) and taur_sw.sum() > 0
     print(f"OK: taumol_sw  taug sum={taug_sw.sum():.4f} max={taug_sw.max():.4f} | taur sum={taur_sw.sum():.4f}")
@@ -68,7 +68,7 @@ def main():
         f.create_dataset("tsfc", data=tsfc)
         for name, v in [("h2o", h2o), ("o3", o3), ("co2", co2), ("ch4", ch4), ("n2o", n2o), ("o2", o2)]:
             f.create_dataset(name, data=v)
-        f.create_dataset("cossza", data=0.5)
+        f.attrs["cossza_meta"] = 0.5  # metadonnee (pas une entree de taumol_sw)
         g = f.create_group("sw")
         g.create_dataset("taug", data=taug_sw)
         g.create_dataset("taur", data=taur_sw)

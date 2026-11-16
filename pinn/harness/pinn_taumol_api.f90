@@ -73,13 +73,13 @@ contains
   ! Une colonne atmospherique -> taug/taur (nlay x ngptsw), clear-sky, sans aerosol.
   ! Entrees (1D, taille max sw_mxlay, les nlay premieres sont lues) :
   !   play(nlay) pressions couches (hPa), plev(0:nlay) niveaux, tlay/tlev temperatures (K),
-  !   tsfc, vmr h2o/o3/co2/ch4/n2o/o2, cossza (cosinus zenithal solaire, >0)
+  !   tsfc, vmr h2o/o3/co2/ch4/n2o/o2 (taumol_sw ne prend pas le cosinus zenithal)
   subroutine pinn_sw_taumol(nlay, play, plev, tlay, tlev, tsfc, &
-                            h2o, o3, co2, ch4, n2o, o2, cossza, taug, taur) &
+                            h2o, o3, co2, ch4, n2o, o2, taug, taur) &
        bind(C, name="pinn_sw_taumol")
     integer(c_int), value, intent(in) :: nlay
     real(c_double), intent(in)  :: play(*), plev(*), tlay(*), tlev(*), tsfc
-    real(c_double), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*), cossza
+    real(c_double), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
     real(c_double), intent(out) :: taug(*), taur(*)   ! buffers sw_mxlay*ngptsw (col-major)
 
     integer(im) :: n, nlayers, laytrop, layswtch, laylow
@@ -101,13 +101,13 @@ contains
     real(rb) :: cldfmc(ngptsw, sw_mxlay), taucmc(ngptsw, sw_mxlay), ssacmc(ngptsw, sw_mxlay)
     real(rb) :: asmcmc(ngptsw, sw_mxlay), fsfcmc(ngptsw, sw_mxlay)
     real(rb) :: ciwpmc(ngptsw, sw_mxlay), clwpmc(ngptsw, sw_mxlay), cswpmc(ngptsw, sw_mxlay)
-    real(rb) :: reicmc(ngptsw, sw_mxlay), relqmc(ngptsw, sw_mxlay), resnmc(ngptsw, sw_mxlay)
+    real(rb) :: reicmc(sw_mxlay), relqmc(sw_mxlay), resnmc(sw_mxlay)
     real(rb) :: taua(sw_mxlay, 14), ssaa(sw_mxlay, 14), asma(sw_mxlay, 14)
     real(rb) :: colh2o(sw_mxlay), colco2(sw_mxlay), colch4(sw_mxlay), colo2(sw_mxlay)
     real(rb) :: colo3(sw_mxlay), colmol(sw_mxlay), coln2o(sw_mxlay), co2mult(sw_mxlay)
     real(rb) :: fac00(sw_mxlay), fac01(sw_mxlay), fac10(sw_mxlay), fac11(sw_mxlay)
     real(rb) :: selffac(sw_mxlay), selffrac(sw_mxlay), forfac(sw_mxlay), forfrac(sw_mxlay)
-    real(rb) :: cossza_l, taug2(sw_mxlay, ngptsw), taur2(sw_mxlay, ngptsw)
+    real(rb) :: sfluxzen_l(ngptsw), taug2(sw_mxlay, ngptsw), taur2(sw_mxlay, ngptsw)
 
     n = nlay
     play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(0:n)
@@ -136,12 +136,13 @@ contains
                     colo2, colo3, fac00, fac01, fac10, fac11, &
                     selffac, selffrac, indself, forfac, forfrac, indfor)
 
-    cossza_l = cossza
-    if (cossza_l < 1.e-10_rb) cossza_l = 1.e-10_rb
+    ! NB: taumol_sw ne prend PAS le cosinus zenithal : sfluxzen est intent(out)
+    ! (fonction source solaire normalisee par g-point ; prmu0 n'intervient que
+    ! dans le flux, en aval, cf. spcvmc_sw: zincflx = adjflux*zsflxzen*prmu0)
     call taumol_sw(nlayers, colh2o, colco2, colch4, colo2, colo3, colmol, &
                    laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
                    selffac, selffrac, indself, forfac, forfrac, indfor, &
-                   cossza_l, taug2, taur2)
+                   sfluxzen_l, taug2, taur2)
 
     taug(1:n*ngptsw) = reshape(taug2(1:n, 1:ngptsw), (/ n*ngptsw /))
     taur(1:n*ngptsw) = reshape(taur2(1:n, 1:ngptsw), (/ n*ngptsw /))
@@ -175,7 +176,7 @@ contains
     real(rb) :: wx_l(4, lw_mxlay+1), pwvcm, semiss(nbndlw)
     real(rb) :: cldfmc(ngptlw, lw_mxlay), taucmc(ngptlw, lw_mxlay)
     real(rb) :: ciwpmc(ngptlw, lw_mxlay), clwpmc(ngptlw, lw_mxlay), cswpmc(ngptlw, lw_mxlay)
-    real(rb) :: reicmc(ngptlw, lw_mxlay), relqmc(ngptlw, lw_mxlay), resnmc(ngptlw, lw_mxlay)
+    real(rb) :: reicmc(lw_mxlay), relqmc(lw_mxlay), resnmc(lw_mxlay)
     real(rb) :: taua(lw_mxlay, nbndlw)
     real(rb) :: planklay(lw_mxlay, nbndlw), planklev(0:lw_mxlay, nbndlw), plankbnd(nbndlw)
     real(rb) :: colh2o(lw_mxlay), colco2(lw_mxlay), colo3(lw_mxlay), coln2o(lw_mxlay)
