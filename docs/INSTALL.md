@@ -90,9 +90,13 @@ Geodata WPS (~30 Go, optionnel pour un premier profilage avec un cas de test fou
    `Timing for main: time ... on domain 2: ... seconds` donnent le coût par pas de temps.
    Comparer un run `ra_sw_phys=0/ra_lw_phys=0` (désactivés) vs `RRTMG` (4,4/1,4,4,4,4,4,4,4,4)
    → estimation directe de la part radiation, sans recompilation.
-2. **gprof** : recompiler avec `-pg` (l'ajouter dans `configure.wrf` : `FCOPTS`/`LDFLAGS`),
-   lancer `mpirun -np 24 ./wrf.exe`, puis `gprof wrf.exe gmon.out-0 > prof.txt`.
-   Attention : gprof avec MPI ne mesure que le rang 0 — suffisant pour `taumol_*`.
+2. **gprof** : `./docker/build.sh gprof` (image `wrf-pinn:gprof` : WRF recompilé avec
+   `-pg` après touch de toutes les sources, vérifié par `nm main/wrf.exe | grep mcount`),
+   puis `./docker/run.sh . gprof` et dans le conteneur
+   `NP=16 bash /opt/runs/cases/rrtmg_gprof/run.sh`. Le script exporte
+   `GMON_OUT_PREFIX=gmon.out` et passe `-x GMON_OUT_PREFIX` à `mpirun` (un
+   `gmon.out-<pid>` par rang MPI), puis somme tous les profils :
+   `gprof ./wrf.exe gmon.out* > out/gprof.txt`.
 3. Si besoin plus fin : TAU ou Score-P (nécessitent leurs propres builds).
 
 ## Cas de test recommandé pour le profilage
