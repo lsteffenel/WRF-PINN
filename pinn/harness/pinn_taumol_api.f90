@@ -82,7 +82,7 @@ contains
     real(c_float), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
     real(c_float), intent(out) :: taug(*), taur(*)   ! buffers sw_mxlay*ngptsw (col-major)
 
-    integer(im) :: n, nlayers, laytrop, layswtch, laylow
+    integer(im) :: n, nlayers, laytrop, layswtch, laylow, ig
     integer(im) :: jp(sw_mxlay), jt(sw_mxlay), jt1(sw_mxlay)
     integer(im) :: indself(sw_mxlay), indfor(sw_mxlay)
     integer(im) :: inflag, iceflag, liqflag
@@ -144,8 +144,12 @@ contains
                    selffac, selffrac, indself, forfac, forfrac, indfor, &
                    sfluxzen_l, taug2, taur2)
 
-    taug(1:n*ngptsw) = reshape(taug2(1:n, 1:ngptsw), (/ n*ngptsw /))
-    taur(1:n*ngptsw) = reshape(taur2(1:n, 1:ngptsw), (/ n*ngptsw /))
+    ! copie par g-point avec le stride du buffer C (sw_mxlay), PAS n :
+    ! le buffer Python est (MXLAY, NGPTSW) en col-major -> offset lay + (ig-1)*sw_mxlay
+    do ig = 1, ngptsw
+      taug(1+(ig-1)*sw_mxlay : n+(ig-1)*sw_mxlay) = taug2(1:n, ig)
+      taur(1+(ig-1)*sw_mxlay : n+(ig-1)*sw_mxlay) = taur2(1:n, ig)
+    end do
   end subroutine pinn_sw_taumol
 
   !--------------------------------------------------------------------------
@@ -158,7 +162,7 @@ contains
     real(c_float), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
     real(c_float), intent(out) :: taug(*), fracs(*)  ! buffers (lw_mxlay+1)*ngptlw (col-major)
 
-    integer(im) :: n, nlayers, laytrop, istart
+    integer(im) :: n, nlayers, laytrop, istart, ig
     integer(im) :: jp(lw_mxlay), jt(lw_mxlay), jt1(lw_mxlay)
     integer(im) :: indself(lw_mxlay), indfor(lw_mxlay), indminor(lw_mxlay)
     integer(im) :: inflag, iceflag, liqflag
@@ -232,8 +236,11 @@ contains
                 minorfrac, scaleminor, scaleminorn2, indminor, &
                 fracs2, taug2)
 
-    taug(1:(n+1)*ngptlw)  = reshape(taug2(1:n+1, 1:ngptlw),  (/ (n+1)*ngptlw /))
-    fracs(1:(n+1)*ngptlw) = reshape(fracs2(1:n+1, 1:ngptlw), (/ (n+1)*ngptlw /))
+    ! idem LW : buffer C (lw_mxlay+1, ngptlw) col-major, stride lw_mxlay+1
+    do ig = 1, ngptlw
+      taug(1+(ig-1)*(lw_mxlay+1) : (n+1)+(ig-1)*(lw_mxlay+1))  = taug2(1:n+1, ig)
+      fracs(1+(ig-1)*(lw_mxlay+1) : (n+1)+(ig-1)*(lw_mxlay+1)) = fracs2(1:n+1, ig)
+    end do
   end subroutine pinn_lw_taumol
 
 end module pinn_taumol_api
