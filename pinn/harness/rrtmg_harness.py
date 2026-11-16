@@ -5,7 +5,7 @@ Usage (dans le conteneur, apres build.sh) :
     r = RRTMG_Taumol("build/librrtmg_taumol.so",
                     sw_data="/comsoftware/wrf/WRF-4.6.1/run/RRTMG_SW_DATA",
                     lw_data="/comsoftware/wrf/WRF-4.6.1/run/RRTMG_LW_DATA")
-    taug, taur = r.taumol_sw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, cossza)
+    taug, taur = r.taumol_sw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
     taug_lw, fracs = r.taumol_lw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
 
 Conventions : pressions en hPa (play couches nlay, plev niveaux 0..nlay), temperatures en K,
@@ -36,7 +36,7 @@ class RRTMG_Taumol:
         lib.pinn_lw_init.argtypes = [ctypes.c_char_p]
         lib.pinn_lw_init.restype = None
         dp = ctypes.POINTER(ctypes.c_double)
-        lib.pinn_sw_taumol.argtypes = [ctypes.c_int] + [dp] * 12
+        lib.pinn_sw_taumol.argtypes = [ctypes.c_int] + [dp] * 11
         lib.pinn_sw_taumol.restype = None
         lib.pinn_lw_taumol.argtypes = [ctypes.c_int] + [dp] * 10
         lib.pinn_lw_taumol.restype = None
@@ -44,7 +44,9 @@ class RRTMG_Taumol:
         lib.pinn_sw_init(sw_data.encode())
         lib.pinn_lw_init(lw_data.encode())
 
-    def taumol_sw(self, play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, cossza):
+    def taumol_sw(self, play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
+        """taumol_sw : pas de cossza en entree (les epaisseurs optiques n'en
+        dependent pas ; la fonction source solaire est normalisee par prmu0 en aval)."""
         n = len(play)
         assert len(plev) == n + 1 and len(tlev) == n + 1
         taug = np.zeros((MXLAY, NGPTSW), dtype=np.float64, order="F")
@@ -62,7 +64,6 @@ class RRTMG_Taumol:
             _buf(ch4).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             _buf(n2o).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             _buf(o2).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_double(cossza),
             taug.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
             taur.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
         )

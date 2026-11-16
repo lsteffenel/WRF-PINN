@@ -24,9 +24,13 @@ awk '/^MODULE module_ra_rrtmg_lw/{exit} {print}' "$LW" > "$OUT/rrtmg_lw_core.F"
 # - DM_BCAST_MACRO(...) est un #define WRF (module_dm) -> on le supprime (bcast inutile
 #   en standalone mono-processus ; le read juste avant a deja charge les tables)
 awk '/subroutine sw_kgb16\(/{f=1} f && /^END MODULE/{exit} f{print}' "$SW" \
-  | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' -e 's/DM_BCAST_MACRO[[:space:]]*([^)]*)/ /g' > "$OUT/sw_kgb.F"
+  | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' \
+        -e 's/DM_BCAST_[A-Z_]*[[:space:]]*([^)]*)/ /g' \
+        -e 's/[Cc][Aa][Ll][Ll][[:space:]]*wrf_error_fatal(\([a-zA-Z_0-9]*\))/print *, \1; stop 1/g' > "$OUT/sw_kgb.F"
 awk '/subroutine lw_kgb01\(/{f=1} f && /^END MODULE/{exit} f{print}' "$LW" \
-  | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' -e 's/DM_BCAST_MACRO[[:space:]]*([^)]*)/ /g' > "$OUT/lw_kgb.F"
+  | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' \
+        -e 's/DM_BCAST_[A-Z_]*[[:space:]]*([^)]*)/ /g' \
+        -e 's/[Cc][Aa][Ll][Ll][[:space:]]*wrf_error_fatal(\([a-zA-Z_0-9]*\))/print *, \1; stop 1/g' > "$OUT/lw_kgb.F"
 
 cat > "$OUT/pinn_dm_stub.f90" <<'EOF'
 logical function pinn_dm_on_monitor()
