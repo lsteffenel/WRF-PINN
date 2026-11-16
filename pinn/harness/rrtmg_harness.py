@@ -20,6 +20,15 @@ NGPTSW = 112   # ngptsw apres reduction par rrtmg_sw_ini (224 -> 112)
 NGPTLW = 140
 
 
+def dbl_data(path):
+    """On compile avec -DRWORDSIZE=8 (kind_rb = double) -> il faut lire les
+    fichiers de donnees *_DBL (RRTMG_SW_DATA_DBL / RRTMG_LW_DATA_DBL, 2x plus
+    gros car doubles). Si le _DBL existe, on le prend, sinon le fichier de base."""
+    import os
+    dbl = path + "_DBL"
+    return dbl if os.path.exists(dbl) else path
+
+
 def _buf(v, n=MXLAY):
     """np array 1D -> buffer c_double de taille MXLAY (complete par des zeros)."""
     b = np.zeros(n, dtype=np.float64)
@@ -41,8 +50,8 @@ class RRTMG_Taumol:
         lib.pinn_lw_taumol.argtypes = [ctypes.c_int] + [dp] * 10
         lib.pinn_lw_taumol.restype = None
         self.lib = lib
-        lib.pinn_sw_init(sw_data.encode())
-        lib.pinn_lw_init(lw_data.encode())
+        lib.pinn_sw_init(dbl_data(sw_data).encode())
+        lib.pinn_lw_init(dbl_data(lw_data).encode())
 
     def taumol_sw(self, play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
         """taumol_sw : pas de cossza en entree (les epaisseurs optiques n'en
