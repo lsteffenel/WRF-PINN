@@ -22,9 +22,11 @@ NGPTLW = 140
 
 def data_file(path):
     """Fichier de donnees RRTMG a lire : le conteneur compile WRF en RWORDSIZE=4
-    (kind_rb = simple, 4 o) -> on lit le fichier SIMPLE (RRTMG_SW_DATA, pas _DBL).
-    (Le suffixe _DBL ne sert qu'aux builds RWORDSIZE=8.)"""
-    return path
+    (kind_rb = simple) -> fichier SIMPLE (pas _DBL), et comme les RRTMG_*_DATA
+    sont big-endian, build.sh produit une copie LE natif '<path>.le' qu'on prefere."""
+    import os
+    le = path + ".le"
+    return le if os.path.exists(le) else path
 
 
 def _buf(v, n=MXLAY):
