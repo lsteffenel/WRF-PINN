@@ -49,8 +49,9 @@ class RRTMG_Taumol:
         lib.pinn_sw_taumol.restype = None
         lib.pinn_lw_taumol.argtypes = [ctypes.c_int] + [fp] * 10
         lib.pinn_lw_taumol.restype = None
-        lib.pinn_sw_debug.argtypes = ([ctypes.c_int] + [fp] * 10 + [ctypes.c_float]
-                                      + [ctypes.POINTER(ctypes.c_int)] + [fp] * 3)
+        # signature Fortran: (nlay, play,plev,tlay,tlev, tsfc, h2o..o2, laytrop_o, jp_o, pavel_o,colh2o_o,coldry_o)
+        lib.pinn_sw_debug.argtypes = ([ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6
+                                      + [ctypes.POINTER(ctypes.c_int)] * 2 + [fp] * 3)
         lib.pinn_sw_debug.restype = None
         self.lib = lib
         lib.pinn_sw_init(data_file(sw_data).encode())
