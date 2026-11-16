@@ -50,14 +50,21 @@ def main():
     play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2 = standard_profile()
     n = len(play)
 
+    print(f"entrees: n={n} play[{play[0]:.1f}..{play[-1]:.2f}] hPa, tlay[{tlay.min():.1f}..{tlay.max():.1f}] K, "
+          f"h2o max={h2o.max():.2e}, o3 max={o3.max():.2e}, tsfc={tsfc}")
+
     taug_sw, taur_sw = r.taumol_sw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
-    assert taug_sw.shape == (n, NGPTSW) and np.all(np.isfinite(taug_sw)) and taug_sw.sum() > 0
-    assert taur_sw.shape == (n, NGPTSW) and np.all(np.isfinite(taur_sw)) and taur_sw.sum() > 0
-    print(f"OK: taumol_sw  taug sum={taug_sw.sum():.4f} max={taug_sw.max():.4f} | taur sum={taur_sw.sum():.4f}")
+    def stats(name, a):
+        print(f"{name}: shape={a.shape} min={np.nanmin(a):.6g} max={np.nanmax(a):.6g} sum={np.nansum(a):.6g} "
+              f"finite={np.isfinite(a).sum()}/{a.size} >0={(a > 0).sum()}")
+    stats("taug_sw", taug_sw); stats("taur_sw", taur_sw)
+    assert taug_sw.shape == (n, NGPTSW) and np.all(np.isfinite(taug_sw)) and taug_sw.sum() > 0, "taumol_sw -> taug_sw nul/NaN"
+    print("OK: taumol_sw")
 
     taug_lw, fracs = r.taumol_lw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
-    assert taug_lw.shape == (n + 1, NGPTLW) and np.all(np.isfinite(taug_lw)) and taug_lw.sum() > 0
-    print(f"OK: taumol_lw taug sum={taug_lw.sum():.4f} max={taug_lw.max():.4f} | fracs sum={fracs.sum():.4f}")
+    stats("taug_lw", taug_lw); stats("fracs_lw", fracs)
+    assert taug_lw.shape == (n + 1, NGPTLW) and np.all(np.isfinite(taug_lw)) and taug_lw.sum() > 0, "taumol_lw -> taug_lw nul/NaN"
+    print("OK: taumol_lw")
 
     os.makedirs(args.out, exist_ok=True)
     h5path = os.path.join(args.out, "taumol_sample.h5")
