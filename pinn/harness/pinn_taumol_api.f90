@@ -5,7 +5,7 @@
 ! Cote Python : ctypes, tableaux en column-major (Fortran), buffers de taille MXLAY.
 module pinn_taumol_api
   use iso_c_binding
-  use parkind, only: im, rb
+  use parkind, only: im => kind_im, rb => kind_rb
   use parrrsw, only: sw_mxlay => mxlay, ngptsw, sw_mxmol => mxmol, jpband, rrsw_scon
   use parrrtm, only: lw_mxlay => mxlay, ngptlw, nbndlw, lw_mxmol => mxmol
   use rrtmg_sw_rad,    only: inatm_sw
@@ -44,14 +44,14 @@ contains
   subroutine pinn_sw_init(c_datafile) bind(C, name="pinn_sw_init")
     character(kind=c_char), intent(in) :: c_datafile(*)
     character(len=512) :: fname
-    integer :: u
     call c_to_f_string(c_datafile, fname)
-    open(newunit=u, file=trim(fname), form='unformatted', status='old', action='read')
-    call sw_kgb16(u); call sw_kgb17(u); call sw_kgb18(u); call sw_kgb19(u)
-    call sw_kgb20(u); call sw_kgb21(u); call sw_kgb22(u); call sw_kgb23(u)
-    call sw_kgb24(u); call sw_kgb25(u); call sw_kgb26(u); call sw_kgb27(u)
-    call sw_kgb28(u); call sw_kgb29(u)
-    close(u)
+    ! unite fixe 77 : gfortran 4.8 (CentOS 7) ne connait pas newunit= (F2008)
+    open(77, file=trim(fname), form='unformatted', status='old', action='read')
+    call sw_kgb16(77); call sw_kgb17(77); call sw_kgb18(77); call sw_kgb19(77)
+    call sw_kgb20(77); call sw_kgb21(77); call sw_kgb22(77); call sw_kgb23(77)
+    call sw_kgb24(77); call sw_kgb25(77); call sw_kgb26(77); call sw_kgb27(77)
+    call sw_kgb28(77); call sw_kgb29(77)
+    close(77)
     call rrtmg_sw_ini(CPDAIR)
   end subroutine pinn_sw_init
 
@@ -59,14 +59,13 @@ contains
   subroutine pinn_lw_init(c_datafile) bind(C, name="pinn_lw_init")
     character(kind=c_char), intent(in) :: c_datafile(*)
     character(len=512) :: fname
-    integer :: u
     call c_to_f_string(c_datafile, fname)
-    open(newunit=u, file=trim(fname), form='unformatted', status='old', action='read')
-    call lw_kgb01(u); call lw_kgb02(u); call lw_kgb03(u); call lw_kgb04(u)
-    call lw_kgb05(u); call lw_kgb06(u); call lw_kgb07(u); call lw_kgb08(u)
-    call lw_kgb09(u); call lw_kgb10(u); call lw_kgb11(u); call lw_kgb12(u)
-    call lw_kgb13(u); call lw_kgb14(u); call lw_kgb15(u); call lw_kgb16(u)
-    close(u)
+    open(77, file=trim(fname), form='unformatted', status='old', action='read')
+    call lw_kgb01(77); call lw_kgb02(77); call lw_kgb03(77); call lw_kgb04(77)
+    call lw_kgb05(77); call lw_kgb06(77); call lw_kgb07(77); call lw_kgb08(77)
+    call lw_kgb09(77); call lw_kgb10(77); call lw_kgb11(77); call lw_kgb12(77)
+    call lw_kgb13(77); call lw_kgb14(77); call lw_kgb15(77); call lw_kgb16(77)
+    close(77)
     call rrtmg_lw_ini(CPDAIR)
   end subroutine pinn_lw_init
 
@@ -144,8 +143,8 @@ contains
                    selffac, selffrac, indself, forfac, forfrac, indfor, &
                    cossza_l, taug2, taur2)
 
-    taug(1:n*ngptsw) = reshape(taug2(1:n, 1:ngptsw), [n*ngptsw])
-    taur(1:n*ngptsw) = reshape(taur2(1:n, 1:ngptsw), [n*ngptsw])
+    taug(1:n*ngptsw) = reshape(taug2(1:n, 1:ngptsw), (/ n*ngptsw /))
+    taur(1:n*ngptsw) = reshape(taur2(1:n, 1:ngptsw), (/ n*ngptsw /))
   end subroutine pinn_sw_taumol
 
   !--------------------------------------------------------------------------
@@ -232,8 +231,8 @@ contains
                 minorfrac, scaleminor, scaleminorn2, indminor, &
                 fracs2, taug2)
 
-    taug(1:(n+1)*ngptlw)  = reshape(taug2(1:n+1, 1:ngptlw),  [(n+1)*ngptlw])
-    fracs(1:(n+1)*ngptlw) = reshape(fracs2(1:n+1, 1:ngptlw), [(n+1)*ngptlw])
+    taug(1:(n+1)*ngptlw)  = reshape(taug2(1:n+1, 1:ngptlw),  (/ (n+1)*ngptlw /))
+    fracs(1:(n+1)*ngptlw) = reshape(fracs2(1:n+1, 1:ngptlw), (/ (n+1)*ngptlw /))
   end subroutine pinn_lw_taumol
 
 end module pinn_taumol_api

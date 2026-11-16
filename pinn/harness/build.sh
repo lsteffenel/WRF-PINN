@@ -12,8 +12,9 @@ bash "$HERE/extract_sources.sh" "$BUILD"
 cd "$BUILD"
 # -cpp : les .F de WRF passent par le preproc ; -ffree-form OBLIGATOIRE :
 # gfortran traite .F en fixed-form par defaut (WRF passe -ffree-form dans configure.wrf)
+# -DRWORDSIZE=8 : parkind -> kind_rb = double (sinon kind(1.0)=simple, incompatible ctypes)
 # -J : repertoire des .mod
-gfortran -cpp -ffree-form -ffree-line-length-none -O2 -fPIC -shared \
+gfortran -cpp -ffree-form -ffree-line-length-none -DRWORDSIZE=8 -O2 -fPIC -shared \
   -J "$BUILD" \
   -o "$BUILD/librrtmg_taumol.so" \
   pinn_dm_stub.f90 rrtmg_lw_core.F rrtmg_sw_core.F sw_kgb.F lw_kgb.F \

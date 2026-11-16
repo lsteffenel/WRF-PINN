@@ -18,11 +18,15 @@ mkdir -p "$OUT"
 awk '/^MODULE module_ra_rrtmg_sw/{exit} {print}' "$SW" > "$OUT/rrtmg_sw_core.F"
 # core LW : parkind, parrrtm, rrlw_*, mcica_*, rrtmg_lw_*
 awk '/^MODULE module_ra_rrtmg_lw/{exit} {print}' "$LW" > "$OUT/rrtmg_lw_core.F"
-# loaders de tables d'absorption (dans la partie WRF) : sw_kgb16..29, lw_kgb01..16
-awk '/subroutine sw_kgb16\(/{f=1} f{print} f && /^END MODULE module_ra_rrtmg_sw/{exit}' "$SW" \
-  | sed 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' > "$OUT/sw_kgb.F"
-awk '/subroutine lw_kgb01\(/{f=1} f{print} f && /^END MODULE module_ra_rrtmg_lw/{exit}' "$LW" \
-  | sed 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' > "$OUT/lw_kgb.F"
+# loaders de tables d'absorption (dans la partie WRF) : sw_kgb16..29, lw_kgb01..16.
+# - on exclut la ligne "END MODULE ..." (sinon gfortran: Expecting END PROGRAM)
+# - wrf_dm_on_monitor -> stub local (le read n'est fait qu'au "monitor" = ici toujours)
+# - DM_BCAST_MACRO(...) est un #define WRF (module_dm) -> on le supprime (bcast inutile
+#   en standalone mono-processus ; le read juste avant a deja charge les tables)
+awk '/subroutine sw_kgb16\(/{f=1} f && /^END MODULE/{exit} f{print}' "$SW" \
+  | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' -e 's/DM_BCAST_MACRO[[:space:]]*([^)]*)/ /g' > "$OUT/sw_kgb.F"
+awk '/subroutine lw_kgb01\(/{f=1} f && /^END MODULE/{exit} f{print}' "$LW" \
+  | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' -e 's/DM_BCAST_MACRO[[:space:]]*([^)]*)/ /g' > "$OUT/lw_kgb.F"
 
 cat > "$OUT/pinn_dm_stub.f90" <<'EOF'
 logical function pinn_dm_on_monitor()
