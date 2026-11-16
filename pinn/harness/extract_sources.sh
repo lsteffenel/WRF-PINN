@@ -23,14 +23,20 @@ awk '/^MODULE module_ra_rrtmg_lw/{exit} {print}' "$LW" > "$OUT/rrtmg_lw_core.F"
 # - wrf_dm_on_monitor -> stub local (le read n'est fait qu'au "monitor" = ici toujours)
 # - DM_BCAST_MACRO(...) est un #define WRF (module_dm) -> on le supprime (bcast inutile
 #   en standalone mono-processus ; le read juste avant a deja charge les tables)
-awk '/subroutine sw_kgb16\(/{f=1} f && /^END MODULE/{exit} f{print}' "$SW" \
+# loaders de tables d'absorption : on extrait CHAQUE bloc 'subroutine sw_kgbNN /
+# lw_kgbNN ... end subroutine' individuellement (sinon on embarque aussi le reste
+# du module WRF -> symboles externes genre retab_ au dlopen)
+awk '/subroutine sw_kgb[0-9]+\(/{f=1} f{print} f && /^[[:space:]]*end subroutine/{f=0}' "$SW" \
   | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' \
         -e 's/DM_BCAST_[A-Z_]*[[:space:]]*([^)]*)/ /g' \
         -e '/^#define/d' > "$OUT/sw_kgb.F"
-awk '/subroutine lw_kgb01\(/{f=1} f && /^END MODULE/{exit} f{print}' "$LW" \
+awk '/subroutine lw_kgb[0-9]+\(/{f=1} f{print} f && /^[[:space:]]*end subroutine/{f=0}' "$LW" \
   | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' \
         -e 's/DM_BCAST_[A-Z_]*[[:space:]]*([^)]*)/ /g' \
         -e '/^#define/d' > "$OUT/lw_kgb.F"
+grep -c "^subroutine\|^      subroutine" "$OUT/sw_kgb.F" | xargs echo "sw_kgb: nb subroutines extraites (attendu 14):"
+grep -c "^subroutine\|^      subroutine" "$OUT/lw_kgb.F" | xargs echo "lw_kgb: nb subroutines extraites (attendu 16):"
+grep -q "use module_ra\|retab" "$OUT/sw_kgb.F" "$OUT/lw_kgb.F" && { echo "ECHEC: refs WRF residuelles dans les kgb"; exit 1; } || echo "OK: 0 ref module_ra/retab dans les kgb"
 
 # stubs des symboles WRF references par les sources extraites (core + kgb) :
 # - pinn_dm_on_monitor : le "monitor" standalone lit toujours les donnees
