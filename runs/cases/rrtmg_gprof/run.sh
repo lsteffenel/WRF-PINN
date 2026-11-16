@@ -5,11 +5,15 @@
 # A lancer dans le conteneur wrf-pinn:gprof : docker run ... wrf-pinn:gprof
 # Usage : bash /opt/runs/cases/rrtmg_gprof/run.sh
 # Env : NP (rangs MPI, defaut 8), RUNS_ROOT (defaut /opt/runs), WRF_HOME (defaut /comsoftware/wrf/WRF-4.6.1)
+#       NAMELIST (defaut namelist.input) ; ex. NAMELIST=namelist.input.day pour un run
+#       de jour (start_hour=12) : le SW est actif et taumol_sw apparait dans le profil
+#       (le namelist par defaut demarre a 00:00 -> nuit -> rrtmg_swrad a 0)
 set -euo pipefail
 CASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNS_ROOT="${RUNS_ROOT:-/opt/runs}"
 WRF_HOME="${WRF_HOME:-/comsoftware/wrf/WRF-4.6.1}"
 NP="${NP:-8}"
+NAMELIST="${NAMELIST:-namelist.input}"
 WORK="$RUNS_ROOT/cases/rrtmg_gprof/run-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$WORK"
 cd "$WORK"
@@ -18,7 +22,7 @@ ln -sf "$WRF_HOME/main/wrf.exe.gprof" wrf.exe
 [ -x ./ideal.exe ] || { echo "ECHEC: $WRF_HOME/main/ideal.exe absent"; exit 1; }
 [ -x ./wrf.exe ]   || { echo "ECHEC: $WRF_HOME/main/wrf.exe.gprof absent -> image sans variante gprof : 'docker/build.sh gprof' puis relancer le conteneur avec wrf-pinn:gprof"; exit 1; }
 cp "$WRF_HOME/test/em_quarter_ss/input_sounding" .
-cp "$CASE_DIR/namelist.input" .
+cp "$CASE_DIR/$NAMELIST" .
 # donnees lues par wrf.exe dans le cwd (RRTMG: RRTMG_LW_DATA/SW_DATA, ozone*, aerosol*, *.TBL)
 for f in "$WRF_HOME"/run/*; do
   b="$(basename "$f")"
