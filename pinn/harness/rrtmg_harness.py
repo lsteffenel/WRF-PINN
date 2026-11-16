@@ -49,9 +49,8 @@ class RRTMG_Taumol:
         lib.pinn_sw_taumol.restype = None
         lib.pinn_lw_taumol.argtypes = [ctypes.c_int] + [fp] * 10
         lib.pinn_lw_taumol.restype = None
-        # signature Fortran: (nlay, play,plev,tlay,tlev, tsfc, h2o..o2, laytrop_o, jp_o, pavel_o,colh2o_o,coldry_o)
-        lib.pinn_sw_debug.argtypes = ([ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6
-                                      + [ctypes.POINTER(ctypes.c_int)] * 2 + [fp] * 3)
+        # signature Fortran: (nlay, play,plev,tlay,tlev, tsfc, h2o..o2) ; sorties via variables bind(C)
+        lib.pinn_sw_debug.argtypes = [ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6
         lib.pinn_sw_debug.restype = None
         self.lib = lib
         lib.pinn_sw_init(data_file(sw_data).encode())
@@ -108,14 +107,10 @@ class RRTMG_Taumol:
         return taug[: n + 1, :].astype(np.float64), fracs[: n + 1, :].astype(np.float64)
 
     def sw_debug(self, play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
-        """Intermediaires de inatm_sw + setcoef_sw : laytrop, jp, pavel, colh2o, coldry."""
+        """Intermediaires de inatm_sw + setcoef_sw, lus via les variables bind(C)
+        pinn_dbg_* : laytrop, jp, pavel, colh2o, coldry."""
         n = len(play)
         fp = ctypes.POINTER(ctypes.c_float)
-        laytrop = ctypes.c_int(0)
-        jp = np.zeros(MXLAY, dtype=np.int32)
-        pavel = np.zeros(MXLAY, dtype=np.float32)
-        colh2o = np.zeros(MXLAY, dtype=np.float32)
-        coldry = np.zeros(MXLAY, dtype=np.float32)
         self.lib.pinn_sw_debug(
             n,
             _buf(play).ctypes.data_as(fp), _buf(plev, MXLAY + 1).ctypes.data_as(fp),
@@ -123,9 +118,10 @@ class RRTMG_Taumol:
             ctypes.c_float(tsfc),
             _buf(h2o).ctypes.data_as(fp), _buf(o3).ctypes.data_as(fp), _buf(co2).ctypes.data_as(fp),
             _buf(ch4).ctypes.data_as(fp), _buf(n2o).ctypes.data_as(fp), _buf(o2).ctypes.data_as(fp),
-            ctypes.byref(laytrop),
-            jp.ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
-            pavel.ctypes.data_as(fp), colh2o.ctypes.data_as(fp), coldry.ctypes.data_as(fp),
         )
-        return (laytrop.value, jp[:n].astype(np.int64), pavel[:n].astype(np.float64),
-                colh2o[:n].astype(np.float64), coldry[:n].astype(np.float64))
+        laytrop = ctypes.c_int.in_dll(self.lib, "pinn_dbg_laytrop").value
+        jp = np.array((ctypes.c_int * MXLAY).in_dll(self.lib, "pinn_dbg_jp")[:n], dtype=np.int64)
+        pavel = np.array((ctypes.c_float * MXLAY).in_dll(self.lib, "pinn_dbg_pavel")[:n], dtype=np.float64)
+        colh2o = np.array((ctypes.c_float * MXLAY).in_dll(self.lib, "pinn_dbg_colh2o")[:n], dtype=np.float64)
+        coldry = np.array((ctypes.c_float * MXLAY).in_dll(self.lib, "pinn_dbg_coldry")[:n], dtype=np.float64)
+        return laytrop, jp, pavel, colh2o, coldry

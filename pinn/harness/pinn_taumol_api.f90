@@ -26,6 +26,14 @@ module pinn_taumol_api
 
   real(rb), parameter :: CPDAIR = 1004.6_rb   ! comme WRF (module_model_constants: cp)
 
+  ! sorties debug de pinn_sw_debug, lisibles depuis Python via ctypes in_dll
+  ! (plus sur que des dummies intent(out) assumed-size sous gfortran 4.8)
+  integer(c_int), bind(C) :: pinn_dbg_laytrop
+  integer(c_int), bind(C) :: pinn_dbg_jp(sw_mxlay)
+  real(c_float), bind(C) :: pinn_dbg_pavel(sw_mxlay)
+  real(c_float), bind(C) :: pinn_dbg_colh2o(sw_mxlay)
+  real(c_float), bind(C) :: pinn_dbg_coldry(sw_mxlay)
+
 contains
 
   !--------------------------------------------------------------------------
@@ -251,15 +259,11 @@ contains
   ! Debug : refait inatm_sw + setcoef_sw et sort les intermediaires pour
   ! diagnostiquer taumol_sw (laytrop, jp, pavel, colh2o, coldry par couche).
   subroutine pinn_sw_debug(nlay, play, plev, tlay, tlev, tsfc, &
-                           h2o, o3, co2, ch4, n2o, o2, &
-                           laytrop_o, jp_o, pavel_o, colh2o_o, coldry_o) &
+                           h2o, o3, co2, ch4, n2o, o2) &
        bind(C, name="pinn_sw_debug")
     integer(c_int), value, intent(in) :: nlay
     real(c_float), intent(in)  :: play(*), plev(*), tlay(*), tlev(*), tsfc
     real(c_float), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
-    integer(c_int), intent(out) :: laytrop_o
-    integer(c_int), intent(out) :: jp_o(*)
-    real(c_float), intent(out)  :: pavel_o(*), colh2o_o(*), coldry_o(*)
 
     integer(im) :: n, nlayers, laytrop, layswtch, laylow
     integer(im) :: jp(sw_mxlay), jt(sw_mxlay), jt1(sw_mxlay)
@@ -320,11 +324,11 @@ contains
                     selffac, selffrac, indself, forfac, forfrac, indfor)
     print *, '[pinn_sw_debug] setcoef_sw OK laytrop=', laytrop, 'jp(1)=', jp(1)
 
-    laytrop_o = laytrop
-    jp_o(1:n) = jp(1:n)
-    pavel_o(1:n) = pavel(1:n)
-    colh2o_o(1:n) = colh2o(1:n)
-    coldry_o(1:n) = coldry(1:n)
+    pinn_dbg_laytrop = laytrop
+    pinn_dbg_jp(1:n) = jp(1:n)
+    pinn_dbg_pavel(1:n) = pavel(1:n)
+    pinn_dbg_colh2o(1:n) = colh2o(1:n)
+    pinn_dbg_coldry(1:n) = coldry(1:n)
   end subroutine pinn_sw_debug
 
 end module pinn_taumol_api
