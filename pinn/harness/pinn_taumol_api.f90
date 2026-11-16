@@ -294,6 +294,7 @@ contains
     reicmcl = 0._rb; relqmcl = 0._rb; resnmcl = 0._rb
     tauaer = 0._rb; ssaaer = 0._rb; asmaer = 0._rb
 
+    print *, '[pinn_sw_debug] avant inatm_sw n=', n
     call inatm_sw(1, n, 0, 10, play_l, plev_l, tlay_l, tlev_l, tsfc_l, &
                   h2o_l, o3_l, co2_l, ch4_l, n2o_l, o2_l, &
                   1.0_rb, 1, rrsw_scon, 2, 0, 0, &
@@ -303,12 +304,15 @@ contains
                   adjflux, solvar, inflag, iceflag, liqflag, &
                   cldfmc, taucmc, ssacmc, asmcmc, fsfcmc, ciwpmc, clwpmc, cswpmc, &
                   reicmc, relqmc, resnmc, taua, ssaa, asma)
+    print *, '[pinn_sw_debug] inatm_sw OK nlayers=', nlayers, 'pavel(1)=', pavel(1), 'coldry(1)=', coldry(1)
 
+    print *, '[pinn_sw_debug] avant setcoef_sw'
     call setcoef_sw(nlayers, pavel, tavel, pz, tz, tbound, coldry, wkl, &
                     laytrop, layswtch, laylow, jp, jt, jt1, &
                     co2mult, colch4, colco2, colh2o, colmol, coln2o, &
                     colo2, colo3, fac00, fac01, fac10, fac11, &
                     selffac, selffrac, indself, forfac, forfrac, indfor)
+    print *, '[pinn_sw_debug] setcoef_sw OK laytrop=', laytrop, 'jp(1)=', jp(1)
 
     laytrop_o = laytrop
     jp_o(1:n) = jp(1:n)
