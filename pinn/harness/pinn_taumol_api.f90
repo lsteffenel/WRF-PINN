@@ -110,8 +110,10 @@ contains
     real(rb) :: sfluxzen_l(ngptsw), taug2(sw_mxlay, ngptsw), taur2(sw_mxlay, ngptsw)
 
     n = nlay
-    play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(0:n)
-    tlay_l(1, 1:n) = tlay(1:n);  tlev_l(1, 0:n) = tlev(0:n)
+    ! dummies C assumed-size ont lower bound 1 : plev(0:n) serait hors limites.
+    ! Le buffer C contient plev[0..n] -> en Fortran 1-based c'est plev(1:n+1).
+    play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(1:n+1)
+    tlay_l(1, 1:n) = tlay(1:n);  tlev_l(1, 0:n) = tlev(1:n+1)
     tsfc_l(1) = tsfc
     h2o_l(1, 1:n) = h2o(1:n); o3_l(1, 1:n) = o3(1:n); co2_l(1, 1:n) = co2(1:n)
     ch4_l(1, 1:n) = ch4(1:n); n2o_l(1, 1:n) = n2o(1:n); o2_l(1, 1:n) = o2(1:n)
@@ -194,8 +196,10 @@ contains
     real(rb) :: fracs2(lw_mxlay+1, ngptlw), taug2(lw_mxlay+1, ngptlw)
 
     n = nlay
-    play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(0:n)
-    tlay_l(1, 1:n) = tlay(1:n);  tlev_l(1, 0:n) = tlev(0:n)
+    ! dummies C assumed-size ont lower bound 1 : plev(0:n) serait hors limites.
+    ! Le buffer C contient plev[0..n] -> en Fortran 1-based c'est plev(1:n+1).
+    play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(1:n+1)
+    tlay_l(1, 1:n) = tlay(1:n);  tlev_l(1, 0:n) = tlev(1:n+1)
     tsfc_l(1) = tsfc
     h2o_l(1, 1:n) = h2o(1:n); o3_l(1, 1:n) = o3(1:n); co2_l(1, 1:n) = co2(1:n)
     ch4_l(1, 1:n) = ch4(1:n); n2o_l(1, 1:n) = n2o(1:n); o2_l(1, 1:n) = o2(1:n)
@@ -284,8 +288,10 @@ contains
     real(rb) :: selffac(sw_mxlay), selffrac(sw_mxlay), forfac(sw_mxlay), forfrac(sw_mxlay)
 
     n = nlay
-    play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(0:n)
-    tlay_l(1, 1:n) = tlay(1:n);  tlev_l(1, 0:n) = tlev(0:n)
+    ! dummies C assumed-size ont lower bound 1 : plev(0:n) serait hors limites.
+    ! Le buffer C contient plev[0..n] -> en Fortran 1-based c'est plev(1:n+1).
+    play_l(1, 1:n) = play(1:n);  plev_l(1, 0:n) = plev(1:n+1)
+    tlay_l(1, 1:n) = tlay(1:n);  tlev_l(1, 0:n) = tlev(1:n+1)
     tsfc_l(1) = tsfc
     h2o_l(1, 1:n) = h2o(1:n); o3_l(1, 1:n) = o3(1:n); co2_l(1, 1:n) = co2(1:n)
     ch4_l(1, 1:n) = ch4(1:n); n2o_l(1, 1:n) = n2o(1:n); o2_l(1, 1:n) = o2(1:n)
