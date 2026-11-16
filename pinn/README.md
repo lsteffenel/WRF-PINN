@@ -55,11 +55,28 @@ Génère le dataset d'entraînement en bouclant sur les colonnes (time, y, x) de
   `--stride-time`, `--max-samples`, `--block`, `--shuffle/--seed`, `--overwrite`
   (sinon reprend en append).
 
+## train_v0.py — modèle v0 (PyTorch GPU, env `pinn`)
+
+MLP partagé sur les niveaux verticaux. Par niveau (nlay+1), 11 features brutes
+(`log10(plev)`, `tlev`, `log10(h2o/o3)` au niveau, `co2/ch4/n2o/o2`, `tsfc`,
+`log10` des colonnes intégrées h2o/o3 au-dessus du niveau) → standardisées
+(buffers du module) → MLP (256×3) → 504 sorties/niveau : `log1p(taug_sw)` 112,
+`log1p(taur_sw)` 112 (couches 0..nlay−1), `log1p(taug_lw)` 140, `logit(fracs_lw)` 140
+(niveaux 0..nlay). Loss = MSE en log1p (taug/taur) + MSE (fracs). Split 90/10,
+Adam + ReduceLROnPlateau + early stopping, métrique = erreur relative médiane.
+`--export` produit un TorchScript (`*.script.pt`) pour l'intégration WRF (libtorch).
+
+```bash
+/opt/conda/envs/pinn/bin/python3 /opt/pinn/train_v0.py \
+    --h5 /opt/data/taumol_dataset.h5 --out /opt/data/taumol_v0.pt \
+    --epochs 100 --export
+```
+
 ## Étapes suivantes
 
 1. ✅ harness standalone OK (smoke test : taug/taur SW + taug/fracs LW positifs).
 2. ✅ `gen_dataset.py` : dataset HDF5 depuis les wrfout (voir ci-dessus).
-3. Modèle v0 (PyTorch GPU de l'env `pinn`) : MLP par g-point ou conv1d sur les couches.
+3. `train_v0.py` : modèle v0 PyTorch GPU entraîné sur le HDF5 (voir ci-dessus), export TorchScript.
 4. Évaluation **physique** : comparer les heating rates / flux obtenus en
    remplaçant taumol dans le schéma (pas une MSE de τ).
 5. Intégration WRF : `bind(C)` + libtorch batché par tile, remplacement dans
