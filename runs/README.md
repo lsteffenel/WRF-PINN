@@ -36,6 +36,9 @@ et affiche la part radiation = (rad_on − rad_off) / rad_off.
   `bash /opt/runs/cases/rrtmg_gprof/run.sh` → `out/gprof.txt`
   + extraction des lignes `taumol`/`rrtmg`. Mesure de référence rrtmg_on_off
   (em_quarter_ss, NP=16, radt=10) : radiation = 0.672 s ≈ 9.3 % du run.
+  Run **de jour** (start_hour=12, SW actif, `taumol_sw` visible) :
+  `NAMELIST=namelist.input.day NP=16 bash /opt/runs/cases/rrtmg_gprof/run.sh`
+  (le namelist par défaut démarre à 00:00 → nuit → `rrtmg_swrad` = 0).
 
 Pour les cas réels (WPS 4.6) : déposer le package géog **V4** (low-res pour les tests,
 high-res ~29 Go pour la production) dans `<repo>/data/WPS_GEOG` et mettre
