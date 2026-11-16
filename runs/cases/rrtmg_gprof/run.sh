@@ -37,6 +37,6 @@ mkdir -p out
 mv -f rsl.* wrfout* gmon.out* gprof.txt out/ 2>/dev/null || true
 echo "OK: run gprof termine dans $WORK"
 echo "== top du flat profile (out/gprof.txt) =="
-sed -n '/[Ff]lat profile/,/^$/p' out/gprof.txt | head -20
+sed -n '/[Ff]lat profile/,+25p' out/gprof.txt
 echo "== lignes taumol/rrtmg dans le profil =="
-grep -iE "taumol|rrtmg" out/gprof.txt | head -20 || true
+grep -iE "taumol|rrtmg" out/gprof.txt | head -40 || true

@@ -32,7 +32,8 @@ Analyse : `bash /opt/runs/cases/rrtmg_on_off/analyze.sh [run-dir]` somme les lig
 et affiche la part radiation = (rad_on − rad_off) / rad_off.
 - `cases/rrtmg_gprof` : profilage fin gprof (radiation RRTMG ON). Nécessite l'image
   `wrf-pinn:gprof` (`docker/build.sh gprof`, binaires `main/*.exe.gprof` avec `-pg`),
-  puis dans ce conteneur : `bash /opt/runs/cases/rrtmg_gprof/run.sh` → `out/gprof.txt`
+  puis `./docker/run.sh . gprof` (2e argument = tag d'image) et dans ce conteneur :
+  `bash /opt/runs/cases/rrtmg_gprof/run.sh` → `out/gprof.txt`
   + extraction des lignes `taumol`/`rrtmg`. Mesure de référence rrtmg_on_off
   (em_quarter_ss, NP=16, radt=10) : radiation = 0.672 s ≈ 9.3 % du run.
 
