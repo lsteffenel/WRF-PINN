@@ -26,17 +26,27 @@ awk '/^MODULE module_ra_rrtmg_lw/{exit} {print}' "$LW" > "$OUT/rrtmg_lw_core.F"
 awk '/subroutine sw_kgb16\(/{f=1} f && /^END MODULE/{exit} f{print}' "$SW" \
   | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' \
         -e 's/DM_BCAST_[A-Z_]*[[:space:]]*([^)]*)/ /g' \
-        -e 's/[Cc][Aa][Ll][Ll][[:space:]]*wrf_error_fatal(\([a-zA-Z_0-9]*\))/print *, \1; stop 1/g' > "$OUT/sw_kgb.F"
+        -e '/^#define/d' > "$OUT/sw_kgb.F"
 awk '/subroutine lw_kgb01\(/{f=1} f && /^END MODULE/{exit} f{print}' "$LW" \
   | sed -e 's/wrf_dm_on_monitor/pinn_dm_on_monitor/g' \
         -e 's/DM_BCAST_[A-Z_]*[[:space:]]*([^)]*)/ /g' \
-        -e 's/[Cc][Aa][Ll][Ll][[:space:]]*wrf_error_fatal(\([a-zA-Z_0-9]*\))/print *, \1; stop 1/g' > "$OUT/lw_kgb.F"
+        -e '/^#define/d' > "$OUT/lw_kgb.F"
 
+# stubs des symboles WRF references par les sources extraites (core + kgb) :
+# - pinn_dm_on_monitor : le "monitor" standalone lit toujours les donnees
+# - wrf_error_fatal : stop propre (resout tous les 'call wrf_error_fatal' restants)
 cat > "$OUT/pinn_dm_stub.f90" <<'EOF'
 logical function pinn_dm_on_monitor()
   implicit none
   pinn_dm_on_monitor = .true.
 end function pinn_dm_on_monitor
+
+subroutine wrf_error_fatal(msg)
+  implicit none
+  character(len=*), intent(in) :: msg
+  print *, 'FATAL: ', msg
+  stop 1
+end subroutine wrf_error_fatal
 EOF
 
 for f in rrtmg_sw_core.F rrtmg_lw_core.F sw_kgb.F lw_kgb.F pinn_dm_stub.f90; do
