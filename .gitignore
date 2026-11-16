@@ -1,1 +1,4 @@
 runs/cases/*/run-*/
+pinn/harness/build/
+pinn/harness/out/
+__pycache__/
