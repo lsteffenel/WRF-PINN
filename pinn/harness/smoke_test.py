@@ -14,6 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rrtmg_harness import RRTMG_Taumol, NGPTSW, NGPTLW  # noqa: E402
 
 WRF_RUN = os.environ.get("WRF_RUN", "/comsoftware/wrf/WRF-4.6.1/run")
+# les donnees converties LE (.le) sont produites par build.sh a cote du .so
+data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "build")
 
 
 def standard_profile(nlay=40):
@@ -41,8 +43,8 @@ def main():
     args = ap.parse_args()
 
     r = RRTMG_Taumol(args.so,
-                     sw_data=os.path.join(WRF_RUN, "RRTMG_SW_DATA"),
-                     lw_data=os.path.join(WRF_RUN, "RRTMG_LW_DATA"))
+                     sw_data=os.path.join(data_dir, "RRTMG_SW_DATA"),
+                     lw_data=os.path.join(data_dir, "RRTMG_LW_DATA"))
     print("OK: init SW+LW (tables RRTMG chargees)")
 
     play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2 = standard_profile()
