@@ -20,19 +20,17 @@ NGPTSW = 112   # ngptsw apres reduction par rrtmg_sw_ini (224 -> 112)
 NGPTLW = 140
 
 
-def dbl_data(path):
-    """On compile avec -DRWORDSIZE=8 (kind_rb = double) -> il faut lire les
-    fichiers de donnees *_DBL (RRTMG_SW_DATA_DBL / RRTMG_LW_DATA_DBL, 2x plus
-    gros car doubles). Si le _DBL existe, on le prend, sinon le fichier de base."""
-    import os
-    dbl = path + "_DBL"
-    return dbl if os.path.exists(dbl) else path
+def data_file(path):
+    """Fichier de donnees RRTMG a lire : le conteneur compile WRF en RWORDSIZE=4
+    (kind_rb = simple, 4 o) -> on lit le fichier SIMPLE (RRTMG_SW_DATA, pas _DBL).
+    (Le suffixe _DBL ne sert qu'aux builds RWORDSIZE=8.)"""
+    return path
 
 
 def _buf(v, n=MXLAY):
-    """np array 1D -> buffer c_double de taille MXLAY (complete par des zeros)."""
-    b = np.zeros(n, dtype=np.float64)
-    v = np.asarray(v, dtype=np.float64).ravel()
+    """np array 1D -> buffer c_float (kind_rb=simple, RWORDSIZE=4) de taille n."""
+    b = np.zeros(n, dtype=np.float32)
+    v = np.asarray(v, dtype=np.float32).ravel()
     b[: v.size] = v
     return b
 
@@ -44,59 +42,61 @@ class RRTMG_Taumol:
         lib.pinn_sw_init.restype = None
         lib.pinn_lw_init.argtypes = [ctypes.c_char_p]
         lib.pinn_lw_init.restype = None
-        dp = ctypes.POINTER(ctypes.c_double)
-        lib.pinn_sw_taumol.argtypes = [ctypes.c_int] + [dp] * 11
+        fp = ctypes.POINTER(ctypes.c_float)
+        lib.pinn_sw_taumol.argtypes = [ctypes.c_int] + [fp] * 11
         lib.pinn_sw_taumol.restype = None
-        lib.pinn_lw_taumol.argtypes = [ctypes.c_int] + [dp] * 10
+        lib.pinn_lw_taumol.argtypes = [ctypes.c_int] + [fp] * 10
         lib.pinn_lw_taumol.restype = None
         self.lib = lib
-        lib.pinn_sw_init(dbl_data(sw_data).encode())
-        lib.pinn_lw_init(dbl_data(lw_data).encode())
+        lib.pinn_sw_init(data_file(sw_data).encode())
+        lib.pinn_lw_init(data_file(lw_data).encode())
 
     def taumol_sw(self, play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
         """taumol_sw : pas de cossza en entree (les epaisseurs optiques n'en
         dependent pas ; la fonction source solaire est normalisee par prmu0 en aval)."""
         n = len(play)
         assert len(plev) == n + 1 and len(tlev) == n + 1
-        taug = np.zeros((MXLAY, NGPTSW), dtype=np.float64, order="F")
-        taur = np.zeros((MXLAY, NGPTSW), dtype=np.float64, order="F")
+        taug = np.zeros((MXLAY, NGPTSW), dtype=np.float32, order="F")
+        taur = np.zeros((MXLAY, NGPTSW), dtype=np.float32, order="F")
+        fp = ctypes.POINTER(ctypes.c_float)
         self.lib.pinn_sw_taumol(
             n,
-            _buf(play).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(plev, MXLAY + 1).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(tlay).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(tlev, MXLAY + 1).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_double(tsfc),
-            _buf(h2o).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(o3).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(co2).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(ch4).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(n2o).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(o2).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            taug.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            taur.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            _buf(play).ctypes.data_as(fp),
+            _buf(plev, MXLAY + 1).ctypes.data_as(fp),
+            _buf(tlay).ctypes.data_as(fp),
+            _buf(tlev, MXLAY + 1).ctypes.data_as(fp),
+            ctypes.c_float(tsfc),
+            _buf(h2o).ctypes.data_as(fp),
+            _buf(o3).ctypes.data_as(fp),
+            _buf(co2).ctypes.data_as(fp),
+            _buf(ch4).ctypes.data_as(fp),
+            _buf(n2o).ctypes.data_as(fp),
+            _buf(o2).ctypes.data_as(fp),
+            taug.ctypes.data_as(fp),
+            taur.ctypes.data_as(fp),
         )
-        return taug[:n, :].copy(), taur[:n, :].copy()
+        return taug[:n, :].astype(np.float64), taur[:n, :].astype(np.float64)
 
     def taumol_lw(self, play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
         n = len(play)
         assert len(plev) == n + 1 and len(tlev) == n + 1
-        taug = np.zeros((MXLAY + 1, NGPTLW), dtype=np.float64, order="F")
-        fracs = np.zeros((MXLAY + 1, NGPTLW), dtype=np.float64, order="F")
+        taug = np.zeros((MXLAY + 1, NGPTLW), dtype=np.float32, order="F")
+        fracs = np.zeros((MXLAY + 1, NGPTLW), dtype=np.float32, order="F")
+        fp = ctypes.POINTER(ctypes.c_float)
         self.lib.pinn_lw_taumol(
             n,
-            _buf(play).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(plev, MXLAY + 1).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(tlay).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(tlev, MXLAY + 1).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            ctypes.c_double(tsfc),
-            _buf(h2o).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(o3).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(co2).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(ch4).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(n2o).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            _buf(o2).ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            taug.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-            fracs.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+            _buf(play).ctypes.data_as(fp),
+            _buf(plev, MXLAY + 1).ctypes.data_as(fp),
+            _buf(tlay).ctypes.data_as(fp),
+            _buf(tlev, MXLAY + 1).ctypes.data_as(fp),
+            ctypes.c_float(tsfc),
+            _buf(h2o).ctypes.data_as(fp),
+            _buf(o3).ctypes.data_as(fp),
+            _buf(co2).ctypes.data_as(fp),
+            _buf(ch4).ctypes.data_as(fp),
+            _buf(n2o).ctypes.data_as(fp),
+            _buf(o2).ctypes.data_as(fp),
+            taug.ctypes.data_as(fp),
+            fracs.ctypes.data_as(fp),
         )
-        return taug[: n + 1, :].copy(), fracs[: n + 1, :].copy()
+        return taug[: n + 1, :].astype(np.float64), fracs[: n + 1, :].astype(np.float64)

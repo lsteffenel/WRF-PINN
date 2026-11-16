@@ -78,9 +78,9 @@ contains
                             h2o, o3, co2, ch4, n2o, o2, taug, taur) &
        bind(C, name="pinn_sw_taumol")
     integer(c_int), value, intent(in) :: nlay
-    real(c_double), intent(in)  :: play(*), plev(*), tlay(*), tlev(*), tsfc
-    real(c_double), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
-    real(c_double), intent(out) :: taug(*), taur(*)   ! buffers sw_mxlay*ngptsw (col-major)
+    real(c_float), intent(in)  :: play(*), plev(*), tlay(*), tlev(*), tsfc
+    real(c_float), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
+    real(c_float), intent(out) :: taug(*), taur(*)   ! buffers sw_mxlay*ngptsw (col-major)
 
     integer(im) :: n, nlayers, laytrop, layswtch, laylow
     integer(im) :: jp(sw_mxlay), jt(sw_mxlay), jt1(sw_mxlay)
@@ -154,9 +154,9 @@ contains
                             h2o, o3, co2, ch4, n2o, o2, taug, fracs) &
        bind(C, name="pinn_lw_taumol")
     integer(c_int), value, intent(in) :: nlay
-    real(c_double), intent(in)  :: play(*), plev(*), tlay(*), tlev(*), tsfc
-    real(c_double), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
-    real(c_double), intent(out) :: taug(*), fracs(*)  ! buffers (lw_mxlay+1)*ngptlw (col-major)
+    real(c_float), intent(in)  :: play(*), plev(*), tlay(*), tlev(*), tsfc
+    real(c_float), intent(in)  :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
+    real(c_float), intent(out) :: taug(*), fracs(*)  ! buffers (lw_mxlay+1)*ngptlw (col-major)
 
     integer(im) :: n, nlayers, laytrop, istart
     integer(im) :: jp(lw_mxlay), jt(lw_mxlay), jt1(lw_mxlay)

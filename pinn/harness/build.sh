@@ -12,13 +12,13 @@ bash "$HERE/extract_sources.sh" "$BUILD"
 cd "$BUILD"
 # -cpp : les .F de WRF passent par le preproc ; -ffree-form OBLIGATOIRE :
 # gfortran traite .F en fixed-form par defaut (WRF passe -ffree-form dans configure.wrf)
-# -DRWORDSIZE=8 : parkind -> kind_rb = double (sinon kind(1.0)=simple, incompatible ctypes)
-# -fconvert=big-endian : les fichiers RRTMG_*_DATA(_DBL) sont BIG-ENDIAN avec record
-#   markers 4 octets (verifie sur wrf-model/WRF@v4.6.1 run/RRTMG_SW_DATA_DBL: 1er
-#   marqueur BE = 106772 = taille exacte du record sw_kgb16 en double). WRF ajoute
-#   ce flag dans son configure.defaults -> meme convention ici.
+# PAS de -DRWORDSIZE=8 : le conteneur NCAR compile WRF avec NATIVE_RWORDSIZE=4
+# (configure.wrf) -> kind_rb = simple precision (4 o) et WRF lit RRTMG_SW_DATA
+# (simple). On fait pareil : RWORDSIZE=4 par defaut + fichier simple + c_float cote C.
+# -fconvert=big-endian -frecord-marker=4 : BYTESWAPIO de WRF (les RRTMG_*_DATA sont
+#   big-endian, record markers 4 octets ; verifie sur le fichier officiel v4.6.1).
 # -J : repertoire des .mod
-gfortran -cpp -ffree-form -ffree-line-length-none -fconvert=big-endian -DRWORDSIZE=8 -O2 -fPIC -shared \
+gfortran -cpp -ffree-form -ffree-line-length-none -fconvert=big-endian -frecord-marker=4 -O2 -fPIC -shared \
   -J "$BUILD" \
   -o "$BUILD/librrtmg_taumol.so" \
   pinn_dm_stub.f90 rrtmg_lw_core.F rrtmg_sw_core.F sw_kgb.F lw_kgb.F \
