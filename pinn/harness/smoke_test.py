@@ -53,6 +53,11 @@ def main():
     print(f"entrees: n={n} play[{play[0]:.1f}..{play[-1]:.2f}] hPa, tlay[{tlay.min():.1f}..{tlay.max():.1f}] K, "
           f"h2o max={h2o.max():.2e}, o3 max={o3.max():.2e}, tsfc={tsfc}")
 
+    laytrop, jp, pavel, colh2o, coldry = r.sw_debug(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
+    print(f"debug setcoef_sw: laytrop={laytrop}")
+    for k in range(0, n, 4):
+        print(f"  lay {k+1:3d}: pavel={pavel[k]:8.2f} hPa  jp={jp[k]:2d}  colh2o={colh2o[k]:.4e}  coldry={coldry[k]:.4e}")
+
     taug_sw, taur_sw = r.taumol_sw(play, plev, tlay, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2)
     def stats(name, a):
         print(f"{name}: shape={a.shape} min={np.nanmin(a):.6g} max={np.nanmax(a):.6g} sum={np.nansum(a):.6g} "
