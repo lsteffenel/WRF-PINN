@@ -22,18 +22,19 @@ ln -sf "$WRF_HOME/main/wrf.exe.gprof" wrf.exe
 [ -x ./ideal.exe ] || { echo "ECHEC: $WRF_HOME/main/ideal.exe absent"; exit 1; }
 [ -x ./wrf.exe ]   || { echo "ECHEC: $WRF_HOME/main/wrf.exe.gprof absent -> image sans variante gprof : 'docker/build.sh gprof' puis relancer le conteneur avec wrf-pinn:gprof"; exit 1; }
 cp "$WRF_HOME/test/em_quarter_ss/input_sounding" .
-cp "$CASE_DIR/$NAMELIST" .
+# WRF lit toujours "namelist.input" dans le cwd, quel que soit NAMELIST choisi
+cp "$CASE_DIR/$NAMELIST" namelist.input
 # donnees lues par wrf.exe dans le cwd (RRTMG: RRTMG_LW_DATA/SW_DATA, ozone*, aerosol*, *.TBL)
 for f in "$WRF_HOME"/run/*; do
   b="$(basename "$f")"
   case "$b" in namelist.input|*.exe|README*) continue ;; esac
   ln -sf "$f" "$b"
 done
-./ideal.exe > ideal.log 2>&1
+./ideal.exe > ideal.log 2>&1 || { echo "ECHEC: ideal.exe (exit $?) ; tail:"; tail -n 15 ideal.log; tail -n 15 rsl.error.0000 2>/dev/null; exit 1; }
 # conteneur en root : OpenMPI exige --allow-run-as-root
 # GMON_OUT_PREFIX -> un fichier gmon.out-<pid> PAR RANG MPI (sinon ils s'ecrasent)
 export GMON_OUT_PREFIX=gmon.out
-mpirun --allow-run-as-root -x GMON_OUT_PREFIX -np "$NP" ./wrf.exe > wrf.log 2>&1
+mpirun --allow-run-as-root -x GMON_OUT_PREFIX -np "$NP" ./wrf.exe > wrf.log 2>&1 || { echo "ECHEC: mpirun wrf.exe (exit $?) ; tail wrf.log + rsl.error.0000:"; tail -n 15 wrf.log; tail -n 15 rsl.error.0000 2>/dev/null; exit 1; }
 ls gmon.out* > /dev/null 2>&1 || { echo "ECHEC: aucun gmon.out* produit -> wrf.exe non compile avec -pg (rebuild: docker/build.sh gprof)"; exit 1; }
 # gprof somme directement tous les fichiers indiques
 gprof ./wrf.exe gmon.out* > gprof.txt
