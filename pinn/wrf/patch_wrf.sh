@@ -49,7 +49,7 @@ insert_before "$SW" '^ *module rrtmg_sw_spcvmc *$' "$HERE/pinn_shell_sw.inc"
 # 4) wrapper RRTMG_SWRAD : use du shell (apres son IMPLICIT NONE) ...
 awk '
   /SUBROUTINE RRTMG_SWRAD/ {inw=1}
-  inw && /IMPLICIT NONE/ && !done {print; print "   USE module_pinn_shell_sw, ONLY : pinn_precompute_sw_tile"; done=1; inw=0; next}
+  inw && /IMPLICIT NONE/ && !done {print "   USE module_pinn_shell_sw, ONLY : pinn_precompute_sw_tile"; print; done=1; inw=0; next}
   {print}
 ' "$SW" > "$SW.tmp" && mv "$SW.tmp" "$SW"
 # 5) ... et precompute batch de la tuile AVANT la boucle j du wrapper
@@ -80,7 +80,7 @@ sed -i 's/call taumol(/call pinn_taumol_lw(/' "$LW"
 insert_before "$LW" '^ *module rrtmg_lw_rad *$' "$HERE/pinn_shell_lw.inc"
 awk '
   /SUBROUTINE RRTMG_LWRAD/ {inw=1}
-  inw && /IMPLICIT NONE/ && !done {print; print "   USE module_pinn_shell_lw, ONLY : pinn_precompute_lw_tile"; done=1; inw=0; next}
+  inw && /IMPLICIT NONE/ && !done {print "   USE module_pinn_shell_lw, ONLY : pinn_precompute_lw_tile"; print; done=1; inw=0; next}
   {print}
 ' "$LW" > "$LW.tmp" && mv "$LW.tmp" "$LW"
 awk -v call='      call pinn_precompute_lw_tile(its, ite, jts, jte, kts, kte, nlayers, p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr)' '
