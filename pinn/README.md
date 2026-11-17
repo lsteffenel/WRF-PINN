@@ -112,7 +112,11 @@ Pièges connus du patch/build (corrigés) :
   imbriqué → erreur Fortran → `libwrflib.a` incomplet → `undefined reference` au link final ;
 - `./compile` de WRF retourne 0 même si le link final échoue (`Error 1 (ignored)`) :
   `build_wrf_pinn.sh` vérifie donc explicitement `main/ideal.exe` + `main/wrf.exe` et dump
-  les `Error:`/`undefined reference` du log sinon.
+  les `Error:`/`undefined reference` du log sinon ;
+- les `.inc` n'utilisent **pas** `iso_c_binding` et **pas** l'opérateur `//` : le pipeline
+  `.F` de WRF (`/lib/cpp` en mode C, puis `-traditional`) casse `c_char` et avale `//...`
+  (commentaire C) → les shells déclarent les types C à la main (`character(len=1)`,
+  `real(4)`, `integer` + `value`) et construisent la chaîne NUL avec `achar(0)`.
 
 Dans le conteneur : `bash /opt/pinn/wrf/build_wrf_pinn.sh em_quarter_ss` (~20-40 min).
 Le PINN est actif **uniquement sous demande**, via l'env au run :
