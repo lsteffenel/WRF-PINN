@@ -120,9 +120,11 @@ def make_model(hidden, nhidden):
             Z = (X - self.feat_mean) / self.feat_std
             B, L, F = Z.shape
             H = self.net(Z.reshape(B * L, F)).reshape(B, L, self.nout)
-            taug_sw = torch.expm1(H[:, :-1, 0:self.ngptsw])
+            # clamp des sorties log : sans ça, une sortie H~57 -> expm1 ~ 1e25 (vu en eval)
+            # taug observe max ~ 9e4 -> log1p ~ 11.5 ; on clamp [-30, 15] (marge large)
+            taug_sw = torch.expm1(H[:, :-1, 0:self.ngptsw].clamp(-30.0, 15.0))
             taur_sw = torch.pow(10.0, H[:, :-1, self.ngptsw:2 * self.ngptsw].clamp(-12.0, 2.0))
-            taug_lw = torch.expm1(H[:, :, 2 * self.ngptsw:2 * self.ngptsw + self.ngptlw])
+            taug_lw = torch.expm1(H[:, :, 2 * self.ngptsw:2 * self.ngptsw + self.ngptlw].clamp(-30.0, 15.0))
             fracs_lw = torch.sigmoid(H[:, :, 2 * self.ngptsw + self.ngptlw:])
             return taug_sw, taur_sw, taug_lw, fracs_lw
 
