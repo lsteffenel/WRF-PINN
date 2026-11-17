@@ -11,7 +11,7 @@
 module pinn_rad_api
   use iso_c_binding
   use parkind, only: im => kind_im, rb => kind_rb
-  use parrrsw, only: sw_mxlay => mxlay, ngptsw, sw_mxmol => mxmol, jpband, nbndsw, rrsw_scon
+  use parrrsw, only: sw_mxlay => mxlay, ngptsw, sw_mxmol => mxmol, jpband, nbndsw, rrsw_scon, jpb1, jpb2
   use parrrtm, only: lw_mxlay => mxlay, ngptlw, nbndlw, lw_mxmol => mxmol
   use rrsw_con, only: heatfac
   use rrtmg_sw_rad,    only: inatm_sw
@@ -149,7 +149,8 @@ contains
     zcldfmc = 0._rb; ztaucmc = 0._rb; ztaormc = 0._rb; zasycmc = 0._rb; zomgcmc = 1._rb
     ztaua = 0._rb; zasya = 0._rb; zomga = 1._rb
 
-    call spcvmc_sw(n, 1, ngptsw, 1, 0, &
+    ! istart/iend de spcvmc_sw = indices de BANDES (jpb1:jpb2 = 16:29), pas des g-points
+    call spcvmc_sw(n, jpb1, jpb2, 1, 0, &
                    pavel, tavel, pz, tz, tbound, palbd, palbp, &
                    zcldfmc, ztaucmc, zasycmc, zomgcmc, ztaormc, &
                    ztaua, zasya, zomga, prmu0, coldry, wkl, adjflux, &
@@ -266,7 +267,8 @@ contains
     zcldfmc = 0._rb
     ztaucmc = 0._rb
 
-    call rtrnmc(n, 1, ngptlw, 0, pz, semiss, nbndlw, &
+    ! istart/iend de rtrnmc = bandes LW 1..nbndlw (16), pas les g-points
+    call rtrnmc(n, 1, nbndlw, 0, pz, semiss, nbndlw, &
                 zcldfmc, ztaucmc, planklay, planklev, plankbnd, &
                 pwvcm, fracs_l, taut_l, &
                 totuflux_l, totdflux_l, fnet_l, htr_l, &
