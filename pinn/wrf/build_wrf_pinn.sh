@@ -51,6 +51,21 @@ printf '35\n1\n' | ./configure > configure.log 2>&1 || { tail -20 configure.log;
 # ajoute le link PINN dans configure.wrf (LDFLAGS)
 sed -i "s|^LDFLAGS_LOCAL.*|LDFLAGS_LOCAL = -L$WRF_HOME/phys -lpinn_torch -L$CONDA_PREFIX/lib -ltorch -ltorch_cpu -lc10 -lstdc++ -Wl,-rpath,$CONDA_PREFIX/lib -Wl,-rpath,$WRF_HOME/phys|" configure.wrf
 grep -n "lpinn_torch" configure.wrf || { echo "ECHEC: LDFLAGS_LOCAL non patche"; exit 1; }
-./compile "$CASE" > "compile_$CASE.log" 2>&1 || { tail -40 "compile_$CASE.log"; exit 1; }
-echo "OK: WRF compile avec PINN -> $WRF_HOME/main/ideal.exe"
-ls -la main/ideal.exe main/wrf.exe 2>/dev/null || true
+# ATTENTION: ./compile retourne 0 meme si le link final echoue
+# ("make[1]: [Makefile:29: em_ideal] Error 1 (ignored)") -> on verifie les
+# binaires explicitement, sinon on croit que le build a reussi.
+./compile "$CASE" > "compile_$CASE.log" 2>&1 || true
+for b in main/ideal.exe main/wrf.exe; do
+  if [ ! -x "$WRF_HOME/$b" ]; then
+    echo "ECHEC: $b absent apres compile (WRF ignore l'erreur de link final)"
+    echo "--- erreurs Fortran dans compile_$CASE.log :"
+    grep -n "Error:\|Fatal Error" "compile_$CASE.log" | head -20 || true
+    echo "--- undefined reference :"
+    grep -n "undefined reference" "compile_$CASE.log" | head -10 || true
+    echo "--- tail du log :"
+    tail -25 "compile_$CASE.log"
+    exit 1
+  fi
+done
+echo "OK: WRF compile avec PINN -> $WRF_HOME/main/ideal.exe + main/wrf.exe"
+ls -la main/ideal.exe main/wrf.exe

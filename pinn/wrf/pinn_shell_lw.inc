@@ -1,10 +1,13 @@
       module module_pinn_shell_lw
 ! Shell de taumol (RRTMG LW) pour WRF (insere dans module_ra_rrtmg_lw.F par
-! patch_wrf.sh, juste avant le driver rrtmg_lw). Le driver appelle taumol par
+! patch_wrf.sh, juste avant module rrtmg_lw_rad). Le driver appelle taumol par
 ! colonne : on remplace ce call par pinn_taumol_lw (sed), qui copie fracs/taug
 ! depuis les buffers PINN precalcules en batch (pinn_precompute_lw, insere avant
 ! la boucle iplon) si PINN_MODEL est defini, sinon appelle taumol_ref.
-      use iso_c_binding
+! NOTE: pas de use iso_c_binding ici (le pipeline cpp de WRF + gfortran 4.8 fait
+! echouer c_char) et pas de double-slash (le cpp en mode C le prend pour un commentaire) :
+! on declare les types C a la main (character(len=1)=c_char, real(4)=c_float,
+! integer par defaut = c_int) et on construit la chaine NUL a la main.
       use parkind, only: im => kind_im, rb => kind_rb
       use parrrtm, only: mxlay, ngptlw
       use rrtmg_lw_taumol, only: taumol_ref
@@ -12,26 +15,26 @@
       logical :: pinn_lw_on = .false.
       logical :: pinn_lw_init_done = .false.
       integer(im) :: pinn_lw_col = 0
-      real(c_float), allocatable :: pinn_lw_taug(:, :, :), pinn_lw_fracs(:, :, :)  ! (ncol, mxlay+1, ngptlw)
+      real(4), allocatable :: pinn_lw_taug(:, :, :), pinn_lw_fracs(:, :, :)  ! (ncol, mxlay+1, ngptlw)
       interface
         subroutine c_pinn_init(m) bind(C, name="pinn_torch_init")
-          character(kind=c_char), intent(in) :: m(*)
+          character(len=1), intent(in) :: m(*)
         end subroutine c_pinn_init
         subroutine c_pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                         h2o, o3, co2, ch4, n2o, o2, taug, fracs) &
              bind(C, name="pinn_torch_precompute_lw")
-          import
-          integer(c_int), value, intent(in) :: ncol, nlay
-          real(c_float), intent(in) :: play(*), plev(*), tlay(*), tlev(*), tsfc(*)
-          real(c_float), intent(in) :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
-          real(c_float), intent(out) :: taug(*), fracs(*)
+          integer, value, intent(in) :: ncol, nlay
+          real(4), intent(in) :: play(*), plev(*), tlay(*), tlev(*), tsfc(*)
+          real(4), intent(in) :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
+          real(4), intent(out) :: taug(*), fracs(*)
         end subroutine c_pinn_precompute_lw
       end interface
       contains
       subroutine pinn_lw_init_once()
         character(len=1024) :: m
+        character(len=1025) :: mc
         character(len=64) :: fl
-        integer :: ios, ios2, fv
+        integer :: ios, ios2, fv, l
         if (pinn_lw_init_done) return
         pinn_lw_init_done = .true.
         call get_environment_variable("PINN_MODEL", m, status=ios)
@@ -44,7 +47,10 @@
           print *, "[PINN] LW desactive (PINN_LW=0), Fortran taumol"
           return
         end if
-        call c_pinn_init(trim(m)//c_null_char)
+        l = len_trim(m)
+        mc = achar(0)
+        mc(1:l) = m(1:l)
+        call c_pinn_init(mc)
         pinn_lw_on = .true.
         print *, "[PINN] LW: modele charge: ", trim(m)
       end subroutine pinn_lw_init_once
