@@ -24,6 +24,7 @@ build_variant () {
     # et sera resolu vers le shell via le use ajoute ci-dessous)
     sed -i -e 's/^      subroutine taumol_sw(/      subroutine taumol_sw_ref(/' \
            -e 's/^      end subroutine taumol_sw/      end subroutine taumol_sw_ref/' \
+           -e 's/use rrtmg_sw_taumol, only: taumol_sw$/use rrtmg_sw_taumol, only: taumol_sw_ref/' \
            "$B/rrtmg_sw_core.F"
     sed -i 's/^\( *use rrtmg_sw_taumol.*\)$/\1\n      use pinn_taumol_shell, only: taumol_sw/' \
            "$B/rrtmg_sw_core.F"
