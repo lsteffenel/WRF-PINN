@@ -63,6 +63,40 @@ def column_from_wrfout(P, PB, T, QV, T2, iy, ix):
     return prof, nlay
 
 
+def synthetic_profile(rng, nlay):
+    """Profil aleatoire physiquement plausible (pour diversifier le dataset) :
+    p log psurf->ptop, T avec lapse rate variable + plancher tropospherique,
+    qv exponentiel (H aleatoire) + bruit lognormal, o3 gaussien en log10(p),
+    gaz traces quasi constants."""
+    psurf = rng.uniform(950.0, 1030.0)
+    ptop = rng.uniform(0.3, 2.0)
+    plev = np.logspace(np.log10(psurf), np.log10(ptop), nlay + 1)
+    play = 0.5 * (plev[:-1] + plev[1:])
+    tsfc = rng.uniform(265.0, 308.0)
+    lapse = rng.uniform(5.0, 7.2)
+    tmin = rng.uniform(185.0, 215.0)
+    z = np.log10(psurf / plev)
+    z_km = 15.0 * z / max(z[-1], 1e-9)
+    tlev = np.clip(tsfc - 0.45 * lapse * z_km, tmin, 320.0)
+    tlev = tlev + rng.normal(0.0, 0.5, nlay + 1)
+    tlay = 0.5 * (tlev[:-1] + tlev[1:])
+    qvs = rng.uniform(1.0e-4, 2.0e-2)
+    H = rng.uniform(1.2, 3.5)
+    qv = qvs * np.exp(-z_km / H) * np.exp(rng.normal(0.0, 0.3, nlay + 1))
+    qv = np.clip(qv, 1.0e-7, None)
+    h2o = 0.5 * (qv[:-1] + qv[1:]) * M_AIR_OVER_M_H2O
+    c = rng.uniform(1.0, 2.0)
+    amp = 10.0 ** rng.uniform(-6.5, -5.5)
+    o3 = amp * np.exp(-((np.log10(play) - c) ** 2) / 0.6) + 1.0e-8
+    co2 = np.full(nlay, rng.uniform(380.0, 420.0) * 1e-6)
+    ch4 = np.full(nlay, rng.uniform(1.7, 1.9) * 1e-6)
+    n2o = np.full(nlay, rng.uniform(0.30, 0.34) * 1e-6)
+    o2 = np.full(nlay, 0.209)
+    prof = {"play": play, "plev": plev, "tlay": tlay, "tlev": tlev, "tsfc": tsfc,
+            "h2o": h2o, "o3": o3, "co2": co2, "ch4": ch4, "n2o": n2o, "o2": o2}
+    return prof, nlay
+
+
 def list_columns(patterns, stride_time, stride_xy):
     import netCDF4
     files = sorted({p for pat in patterns for p in glob.glob(pat)})
@@ -152,17 +186,26 @@ def main():
     ap.add_argument("--shuffle", action="store_true", help="melanger les colonnes avant generation")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--overwrite", action="store_true", help="ecraser le dataset de sortie s'il existe")
+    ap.add_argument("--synthetic", type=int, default=0,
+                    help="nb de profils SYNTHETIQUES aleatoires generes (mode sans wrfout, pour diversifier)")
+    ap.add_argument("--nlay", type=int, default=39, help="nlay des profils synthetiques (doit matcher le dataset existant)")
     args = ap.parse_args()
 
-    files, coords = list_columns(args.wrfout, args.stride_time, args.stride_xy)
-    if not files:
-        sys.exit(f"Aucun fichier wrfout pour {args.wrfout}")
-    print(f"{len(files)} fichier(s) wrfout, {len(coords)} colonnes candidates "
-          f"(stride_time={args.stride_time}, stride_xy={args.stride_xy})")
-    if args.shuffle:
-        order = np.random.RandomState(args.seed).permutation(len(coords))
-        coords = [coords[i] for i in order]
-    coords = coords[: args.max_samples]
+    rng_synth = np.random.RandomState(args.seed + 1)
+    if args.synthetic > 0:
+        files = []
+        coords = [(None, i, 0, 0) for i in range(args.synthetic)]
+        print(f"mode synthetique: {args.synthetic} profils aleatoires (nlay={args.nlay})")
+    else:
+        files, coords = list_columns(args.wrfout, args.stride_time, args.stride_xy)
+        if not files:
+            sys.exit(f"Aucun fichier wrfout pour {args.wrfout}")
+        print(f"{len(files)} fichier(s) wrfout, {len(coords)} colonnes candidates "
+              f"(stride_time={args.stride_time}, stride_xy={args.stride_xy})")
+        if args.shuffle:
+            order = np.random.RandomState(args.seed).permutation(len(coords))
+            coords = [coords[i] for i in order]
+        coords = coords[: args.max_samples]
     print(f"-> {len(coords)} colonnes a generer (max-samples={args.max_samples})")
 
     r = RRTMG_Taumol(args.so, sw_data=args.sw_data, lw_data=args.lw_data)
@@ -188,14 +231,17 @@ def main():
         return np.ma.filled(v, np.nan) if np.ma.isMaskedArray(v) else np.asarray(v)
 
     for fi, t, iy, ix in coords:
-        if fi != cur_fi:
-            if ds is not None:
-                ds.close()
-            ds = netCDF4.Dataset(files[fi])
-            cur_fi = fi
-        P, PB, T, QV = read_var("P", t), read_var("PB", t), read_var("T", t), read_var("QVAPOR", t)
-        T2 = read_var("T2", t) if "T2" in ds.variables else None
-        prof, nlay_col = column_from_wrfout(P, PB, T, QV, T2, iy, ix)
+        if fi is None:
+            prof, nlay_col = synthetic_profile(rng_synth, args.nlay)
+        else:
+            if fi != cur_fi:
+                if ds is not None:
+                    ds.close()
+                ds = netCDF4.Dataset(files[fi])
+                cur_fi = fi
+            P, PB, T, QV = read_var("P", t), read_var("PB", t), read_var("T", t), read_var("QVAPOR", t)
+            T2 = read_var("T2", t) if "T2" in ds.variables else None
+            prof, nlay_col = column_from_wrfout(P, PB, T, QV, T2, iy, ix)
         if nlay is None:
             nlay = nlay_col
             f, n0 = open_h5(args.out, nlay, args.overwrite)
@@ -227,7 +273,7 @@ def main():
         by["sw_taur"].append(taur_sw)
         by["lw_taug"].append(taug_lw)
         by["lw_fracs"].append(fracs_lw)
-        bmeta["src_file"].append(os.path.basename(files[fi]))
+        bmeta["src_file"].append("synthetic" if fi is None else os.path.basename(files[fi]))
         bmeta["src_time"].append(t)
         bmeta["src_iy"].append(iy)
         bmeta["src_ix"].append(ix)
