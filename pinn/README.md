@@ -107,7 +107,12 @@ Remplace `taumol_sw`/`taumol` par le TorchScript (libtorch) dans WRF, batché pa
 - `compare_runs.py` : compare deux wrfout (RTHRATEN*, RSHORT, RLONG, ...).
 
 Dans le conteneur : `bash /opt/pinn/wrf/build_wrf_pinn.sh em_quarter_ss` (~20-40 min).
-Le binaire utilise le PINN si `PINN_MODEL=/opt/data/taumol_v6.script.pt` est dans l'env, sinon le Fortran (réf). Runs :
+Le PINN est actif **uniquement sous demande**, via l'env au run :
+- `PINN_MODEL=/opt/data/taumol_v6.script.pt` : active SW+LW ; absent ou `off`/`none`/`fortran` -> Fortran pur (meme binaire) ;
+- `PINN_SW=0` / `PINN_LW=0` : desactive seulement SW ou LW (comparaison separee).
+Chaque precompute batch affiche `[PINN] precompute_sw/lw ncol=... cpu=... s` dans rsl.out.0000
+(chrono dedie = cout PINN par appel radiation, a comparer au taumol_sw Fortran du run ref et
+au `Timing for main`). Runs :
 ```bash
 cd /opt/runs/cases/em_quarter_ss
 RUNS_ROOT=/opt/runs NP=8 bash run.sh                                   # ref
