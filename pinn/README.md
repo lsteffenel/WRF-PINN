@@ -98,11 +98,27 @@ bash /opt/pinn/harness/build.sh && bash /opt/pinn/harness/build_rad.sh
     --n 200 --cossza 0.5 --out /opt/data/eval_physique.h5
 ```
 
+## wrf/ — intégration dans WRF (étape 5)
+
+Remplace `taumol_sw`/`taumol` par le TorchScript (libtorch) dans WRF, batché par tile :
+- `pinn_torch.cpp` : wrapper C++ (`pinn_torch_init`, `pinn_torch_precompute_sw/lw`) — construit les 14 features/niveau (identiques à `train_v0.build_features`), forward du TorchScript, écrit taug/taur/taug_lw/fracs en layout Fortran.
+- `pinn_shell_sw.inc` / `pinn_shell_lw.inc` : shells insérés dans `module_ra_rrtmg_sw.F` / `_lw.F` par `patch_wrf.sh` (taumol_sw/taumol renommés `*_ref` = fallback ; precompute batch inséré avant la boucle `iplon` des drivers `rrtmg_sw`/`rrtmg_lw` ; le shell lit les buffers par colonne).
+- `build_wrf_pinn.sh` : compile `libpinn_torch.so`, patch les sources, configure+compile WRF avec libtorch dans le link.
+- `compare_runs.py` : compare deux wrfout (RTHRATEN*, RSHORT, RLONG, ...).
+
+Dans le conteneur : `bash /opt/pinn/wrf/build_wrf_pinn.sh em_quarter_ss` (~20-40 min).
+Le binaire utilise le PINN si `PINN_MODEL=/opt/data/taumol_v6.script.pt` est dans l'env, sinon le Fortran (réf). Runs :
+```bash
+cd /opt/runs/cases/em_quarter_ss
+RUNS_ROOT=/opt/runs NP=8 bash run.sh                                   # ref
+PINN_MODEL=/opt/data/taumol_v6.script.pt RUNS_ROOT=/opt/runs NP=8 bash run.sh   # PINN
+/opt/conda/envs/pinn/bin/python3 /opt/pinn/wrf/compare_runs.py     run-REF/out/wrfout_d01_0001 run-PINN/out/wrfout_d01_0001
+```
+
 ## Étapes suivantes
 
 1. ✅ harness standalone OK (smoke test : taug/taur SW + taug/fracs LW positifs).
 2. ✅ `gen_dataset.py` : dataset HDF5 depuis les wrfout (voir ci-dessus).
 3. ✅ `train_v0.py` v2 : toutes les métriques τ>1e-2 < 6 % (taur_sw 0,3 %, taug_sw 6 %, taug_lw 3,4 %, fracs 0,14 %), export TorchScript.
 4. `eval_physique.py` : évaluation physique (flux/heating rates Fortran vs PINN, voir ci-dessus).
-5. Intégration WRF : `bind(C)` + libtorch batché par tile, remplacement dans
-   `module_ra_rrtmg_sw/lw`.
+5. `wrf/` : intégration WRF (shell taumol + libtorch batché par tile, voir ci-dessus).
