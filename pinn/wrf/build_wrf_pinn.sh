@@ -46,6 +46,13 @@ bash "$HERE/patch_wrf.sh"
 
 # 3) configure + compile WRF avec libpinn_torch + libtorch dans le link
 cd "$WRF_HOME"
+# CLEAN=1 -> ./clean d'abord : evite les .o / libwrflib.a obsoletes d'un build
+# precedent incomplet (WRF ne recompile que ce dont la source a change, donc un
+# module qui avait echoue peut manquer de l'archive -> undefined reference au link)
+if [ "${CLEAN:-0}" = "1" ]; then
+  echo "CLEAN=1 -> ./clean (build from scratch)"
+  ./clean > clean.log 2>&1 || true
+fi
 # choix dmpar gcc (le conteneur NCAR) : repondre automatiquement au prompt de configure
 printf '35\n1\n' | ./configure > configure.log 2>&1 || { tail -20 configure.log; exit 1; }
 # ajoute le link PINN dans configure.wrf (LDFLAGS)
@@ -62,6 +69,12 @@ for b in main/ideal.exe main/wrf.exe; do
     grep -n "Error:\|Fatal Error" "compile_$CASE.log" | head -20 || true
     echo "--- undefined reference :"
     grep -n "undefined reference" "compile_$CASE.log" | head -10 || true
+    echo "--- .o des modules suspects :"
+    ls -la phys/module_ra_rrtmg_sw.o phys/module_ra_rrtmg_lw.o phys/module_bep_bem_helper.o phys/module_physics_init.o 2>&1 | head -6 || true
+    echo "--- membres rrtmg/bep dans main/libwrflib.a :"
+    ar t main/libwrflib.a 2>/dev/null | grep -E "rrtmg_sw|rrtmg_lw|bep_bem_helper|physics_init" || echo "(aucun)"
+    echo "--- modules compiles mentionnes dans le log :"
+    grep -n "module_ra_rrtmg_sw\|module_ra_rrtmg_lw" "compile_$CASE.log" | head -6 || true
     echo "--- tail du log :"
     tail -25 "compile_$CASE.log"
     exit 1
