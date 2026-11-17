@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Build WRF avec le PINN (libtorch) : compile pinn_torch.cpp en libpinn_torch.so,
+# patche les sources RRTMG, puis configure + compile em_quarter_ss avec libtorch
+# dans le link. Le binaire wrf.exe utilisera le PINN si PINN_MODEL=<modele.script.pt>
+# est dans l'env au run, sinon le Fortran de reference (fallback).
+# Usage (dans le conteneur, python de l'env pinn actif) :
+#   WRF_HOME=/comsoftware/wrf/WRF-4.6.1 bash /opt/pinn/wrf/build_wrf_pinn.sh [em_quarter_ss]
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WRF_HOME="${WRF_HOME:-/comsoftware/wrf/WRF-4.6.1}"
+CASE="${1:-em_quarter_ss}"
+CONDA_PREFIX="${CONDA_PREFIX:-/opt/conda/envs/pinn}"
+
+# 1) libpinn_torch.so (libtorch de l'env conda pinn)
+g++ -O2 -fPIC -shared -std=c++17 \
+  -I"$CONDA_PREFIX/include" -I"$CONDA_PREFIX/include/torch/csrc/api/include" \
+  -L"$CONDA_PREFIX/lib" -ltorch -ltorch_cpu -lc10 \
+  -Wl,-rpath,"$CONDA_PREFIX/lib" \
+  -o "$WRF_HOME/phys/libpinn_torch.so" "$HERE/pinn_torch.cpp"
+echo "OK: $WRF_HOME/phys/libpinn_torch.so"
+
+# 2) patch des sources RRTMG
+bash "$HERE/patch_wrf.sh"
+
+# 3) configure + compile WRF avec libpinn_torch + libtorch dans le link
+cd "$WRF_HOME"
+# choix dmpar gcc (le conteneur NCAR) : repondre automatiquement au prompt de configure
+printf '35\n1\n' | ./configure > configure.log 2>&1 || { tail -20 configure.log; exit 1; }
+# ajoute le link PINN dans configure.wrf (LDFLAGS)
+sed -i "s|^LDFLAGS_LOCAL.*|LDFLAGS_LOCAL = -L$WRF_HOME/phys -lpinn_torch -L$CONDA_PREFIX/lib -ltorch -ltorch_cpu -lc10 -Wl,-rpath,$CONDA_PREFIX/lib -Wl,-rpath,$WRF_HOME/phys|" configure.wrf
+grep -n "lpinn_torch" configure.wrf || { echo "ECHEC: LDFLAGS_LOCAL non patche"; exit 1; }
+./compile "$CASE" > "compile_$CASE.log" 2>&1 || { tail -40 "compile_$CASE.log"; exit 1; }
+echo "OK: WRF compile avec PINN -> $WRF_HOME/main/wrf.exe"
+ls -la main/wrf.exe
