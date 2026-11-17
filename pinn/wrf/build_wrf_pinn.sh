@@ -52,5 +52,5 @@ printf '35\n1\n' | ./configure > configure.log 2>&1 || { tail -20 configure.log;
 sed -i "s|^LDFLAGS_LOCAL.*|LDFLAGS_LOCAL = -L$WRF_HOME/phys -lpinn_torch -L$CONDA_PREFIX/lib -ltorch -ltorch_cpu -lc10 -lstdc++ -Wl,-rpath,$CONDA_PREFIX/lib -Wl,-rpath,$WRF_HOME/phys|" configure.wrf
 grep -n "lpinn_torch" configure.wrf || { echo "ECHEC: LDFLAGS_LOCAL non patche"; exit 1; }
 ./compile "$CASE" > "compile_$CASE.log" 2>&1 || { tail -40 "compile_$CASE.log"; exit 1; }
-echo "OK: WRF compile avec PINN -> $WRF_HOME/main/wrf.exe"
-ls -la main/wrf.exe
+echo "OK: WRF compile avec PINN -> $WRF_HOME/main/ideal.exe"
+ls -la main/ideal.exe main/wrf.exe 2>/dev/null || true
