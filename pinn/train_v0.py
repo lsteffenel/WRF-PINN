@@ -1,19 +1,21 @@
 """Modele v0 (PyTorch GPU) : emulation de taumol_sw / taumol (RRTMG) depuis le dataset HDF5.
 
 Architecture : MLP partage sur les niveaux verticaux. Par niveau i (nlay+1 niveaux),
-11 features brutes = [log10(plev), tlev, log10(h2o_niv), log10(o3_niv), co2, ch4, n2o,
-o2, tsfc, log10(col_h2o_above), log10(col_o3_above)] -> standardisees (buffers du
-module) -> MLP -> 504 sorties par niveau :
+13 features brutes = [log10(plev), tlev, tlay_niv, log10(h2o_niv), log10(o3_niv),
+co2, ch4, n2o, o2, tsfc, log10(col_h2o_above), log10(col_o3_above), log10(dp_couche)]
+-> standardisees (buffers du module) -> MLP -> 504 sorties par niveau :
   [0:112]    = log1p(taug_sw)   (positions 0..nlay-1 = couches SW)
   [112:224]  = log1p(taur_sw)
   [224:364]  = log1p(taug_lw)   (positions 0..nlay)
   [364:504]  = logit(fracs_lw)
-Loss : MSE en log1p pour taug/taur, MSE pour fracs (sigmoid). Export TorchScript
-(--export) pour l'integration WRF ulterieure (libtorch, appel depuis Fortran).
+Loss : MSE en log1p pour taug/taur (poids --w-taur sur taur, Rayleigh depend de
+dp_couche), MSE pour fracs (sigmoid). Metriques : erreur relative mediane globale
+et restreinte aux tau > 1e-2 (les g-points quasi transparents faussent la mediane).
+Export TorchScript (--export) pour l'integration WRF ulterieure (libtorch).
 
 Usage (dans le conteneur, python de l'env conda pinn) :
     /opt/conda/envs/pinn/bin/python3 /opt/pinn/train_v0.py \
-        --h5 /opt/data/taumol_dataset.h5 --out /opt/data/taumol_v0.pt --epochs 100 --export
+        --h5 /opt/data/taumol_dataset.h5 --out /opt/data/taumol_v0.pt --epochs 200 --export
 """
 import argparse
 import os
@@ -22,7 +24,7 @@ from typing import Tuple
 
 import numpy as np
 
-NFEAT = 11
+NFEAT = 13
 NGPTSW = 112
 NGPTLW = 140
 NOUT = 2 * NGPTSW + 2 * NGPTLW
@@ -36,6 +38,8 @@ def build_features(play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
     o3 = np.asarray(o3, dtype=np.float64)
     nlay = play.size
     L = nlay + 1
+    dp = plev[:-1] - plev[1:]
+    tlay = 0.5 * (tlev[:-1] + tlev[1:])
 
     def to_niv(c):
         c = np.asarray(c, dtype=np.float64)
@@ -52,7 +56,10 @@ def build_features(play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
     ch4_n = to_niv(ch4)
     n2o_n = to_niv(n2o)
     o2_n = to_niv(o2)
-    dp = plev[:-1] - plev[1:]
+    tlay_n = to_niv(tlay)
+    dp_n = np.empty(L)
+    dp_n[:nlay] = dp
+    dp_n[nlay] = dp[-1]
 
     def col_above(c):
         cs = np.cumsum((c * dp)[::-1])[::-1]
@@ -63,9 +70,11 @@ def build_features(play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
     colh2o = col_above(h2o)
     colo3 = col_above(o3)
     F = np.stack([
-        np.log10(plev), tlev, np.log10(h2o_n + 1e-12), np.log10(o3_n + 1e-12),
+        np.log10(plev), tlev, tlay_n,
+        np.log10(h2o_n + 1e-12), np.log10(o3_n + 1e-12),
         co2_n, ch4_n, n2o_n, o2_n, np.full(L, float(tsfc)),
         np.log10(colh2o + 1e-12), np.log10(colo3 + 1e-12),
+        np.log10(dp_n + 1e-12),
     ], axis=1)
     return F.astype(np.float32)
 
@@ -118,7 +127,7 @@ def make_model(hidden, nhidden):
     return TaumolV0()
 
 
-def loss_and_metrics(pred, y_sw, y_lw, w_lw):
+def loss_and_metrics(pred, y_sw, y_lw, w_sw, w_taur, w_lw):
     import torch
     taug_sw, taur_sw, taug_lw, fracs_lw = pred
     y_taug_sw = y_sw[..., :NGPTSW].clamp_min(-0.5)
@@ -129,14 +138,20 @@ def loss_and_metrics(pred, y_sw, y_lw, w_lw):
     l_taur_sw = torch.mean((torch.log1p(taur_sw.clamp_min(0)) - torch.log1p(y_taur_sw)) ** 2)
     l_taug_lw = torch.mean((torch.log1p(taug_lw.clamp_min(0)) - torch.log1p(y_taug_lw)) ** 2)
     l_fracs = torch.mean((fracs_lw - y_fracs) ** 2)
-    loss = l_taug_sw + l_taur_sw + w_lw * (l_taug_lw + l_fracs)
+    loss = w_sw * (l_taug_sw + w_taur * l_taur_sw) + w_lw * (l_taug_lw + l_fracs)
     with torch.no_grad():
-        def relerr(p, y):
-            return (torch.abs(p - y) / y.clamp_min(1e-3)).median().item()
+        def relerr(p, y, thr=0.0):
+            m = y > thr
+            if bool(m.any()):
+                return ((p[m] - y[m]).abs() / y[m].clamp_min(1e-3)).median().item()
+            return float("nan")
         met = {
             "taug_sw": relerr(taug_sw, y_taug_sw),
+            "taug_sw>1e-2": relerr(taug_sw, y_taug_sw, 1e-2),
             "taur_sw": relerr(taur_sw, y_taur_sw),
+            "taur_sw>1e-2": relerr(taur_sw, y_taur_sw, 1e-2),
             "taug_lw": relerr(taug_lw, y_taug_lw),
+            "taug_lw>1e-2": relerr(taug_lw, y_taug_lw, 1e-2),
             "fracs_lw": torch.abs(fracs_lw - y_fracs).mean().item(),
         }
     parts = {k: v.item() for k, v in
@@ -152,15 +167,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--h5", default="/opt/data/taumol_dataset.h5")
     ap.add_argument("--out", default="/opt/data/taumol_v0.pt")
-    ap.add_argument("--epochs", type=int, default=100)
+    ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--batch", type=int, default=256)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--val-frac", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--hidden", type=int, default=256)
+    ap.add_argument("--hidden", type=int, default=512)
     ap.add_argument("--nhidden", type=int, default=3)
-    ap.add_argument("--w-lw", type=float, default=1.0, help="poids des termes LW dans la loss")
-    ap.add_argument("--patience", type=int, default=15, help="early stopping (epoques sans amelioration val)")
+    ap.add_argument("--w-sw", type=float, default=1.0)
+    ap.add_argument("--w-taur", type=float, default=10.0, help="poids de taur_sw dans la loss (Rayleigh ~ dp)")
+    ap.add_argument("--w-lw", type=float, default=1.0)
+    ap.add_argument("--patience", type=int, default=20)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--export", action="store_true", help="exporte aussi un TorchScript <out sans .pt>.script.pt")
     args = ap.parse_args()
@@ -217,7 +234,7 @@ def main():
             ysw = ysw.to(device)
             ylw = ylw.to(device)
             pred = model(xb)
-            loss, _, _ = loss_and_metrics(pred, ysw, ylw, args.w_lw)
+            loss, _, _ = loss_and_metrics(pred, ysw, ylw, args.w_sw, args.w_taur, args.w_lw)
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -234,7 +251,7 @@ def main():
                 ysw = ysw.to(device)
                 ylw = ylw.to(device)
                 pred = model(xb)
-                loss, _, met = loss_and_metrics(pred, ysw, ylw, args.w_lw)
+                loss, _, met = loss_and_metrics(pred, ysw, ylw, args.w_sw, args.w_taur, args.w_lw)
                 va_loss += loss.item()
                 nb += 1
                 for k, v in met.items():
@@ -244,7 +261,9 @@ def main():
         sched.step(va_loss)
         lr_now = opt.param_groups[0]["lr"]
         print(f"ep {ep:3d}/{args.epochs} train={tr_loss:.5f} val={va_loss:.5f} lr={lr_now:.2e} "
-              f"medrelerr taug_sw={met['taug_sw']:.4f} taur_sw={met['taur_sw']:.4f} taug_lw={met['taug_lw']:.4f} "
+              f"taug_sw={met['taug_sw']:.3f}/{met['taug_sw>1e-2']:.3f} "
+              f"taur_sw={met['taur_sw']:.3f}/{met['taur_sw>1e-2']:.3f} "
+              f"taug_lw={met['taug_lw']:.3f}/{met['taug_lw>1e-2']:.3f} "
               f"|dfracs|={met['fracs_lw']:.4f} ({time.time() - t0:.0f}s)", flush=True)
         if va_loss < best:
             best = va_loss
@@ -263,7 +282,7 @@ def main():
     with torch.no_grad():
         for xb, ysw, ylw in va_loader:
             pred = model(xb.to(device))
-            _, _, met = loss_and_metrics(pred, ysw.to(device), ylw.to(device), args.w_lw)
+            _, _, met = loss_and_metrics(pred, ysw.to(device), ylw.to(device), args.w_sw, args.w_taur, args.w_lw)
             nb += 1
             for k, v in met.items():
                 met_sum[k] = met_sum.get(k, 0.0) + v
@@ -279,6 +298,7 @@ def main():
         "nlay": nlay,
         "hidden": args.hidden,
         "nhidden": args.nhidden,
+        "nfeat": NFEAT,
         "metrics": metrics,
         "h5": args.h5,
     }, args.out)
