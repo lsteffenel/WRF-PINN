@@ -13,6 +13,7 @@
       use rrtmg_lw_taumol, only: taumol_ref
       implicit none
       logical :: pinn_lw_on = .false.
+      logical :: pinn_lw_ok = .false.
       logical :: pinn_lw_init_done = .false.
       integer(im) :: pinn_lw_col = 0
       real(4), allocatable :: pinn_lw_taug(:, :, :), pinn_lw_fracs(:, :, :)  ! (ncol, mxlay+1, ngptlw)
@@ -20,14 +21,15 @@
         subroutine c_pinn_init(m) bind(C, name="pinn_torch_init")
           character(len=1), intent(in) :: m(*)
         end subroutine c_pinn_init
-        subroutine c_pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
-                                        h2o, o3, co2, ch4, n2o, o2, taug, fracs) &
-             bind(C, name="pinn_torch_precompute_lw")
+        function c_pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
+                                     h2o, o3, co2, ch4, n2o, o2, taug, fracs) &
+             result(ok) bind(C, name="pinn_torch_precompute_lw")
+          integer :: ok
           integer, value, intent(in) :: ncol, nlay
           real(4), intent(in) :: play(*), plev(*), tlay(*), tlev(*), tsfc(*)
           real(4), intent(in) :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
           real(4), intent(out) :: taug(*), fracs(*)
-        end subroutine c_pinn_precompute_lw
+        end function c_pinn_precompute_lw
       end interface
       contains
       subroutine pinn_lw_init_once()
@@ -60,14 +62,16 @@
         real(rb), intent(in) :: play(:,:), plev(:,:), tlay(:,:), tlev(:,:), tsfc(:)
         real(rb), intent(in) :: h2o(:,:), o3(:,:), co2(:,:), ch4(:,:), n2o(:,:), o2(:,:)
         real :: t0, t1
+        integer :: ok
         call pinn_lw_init_once()
         pinn_lw_col = 0
         if (.not. pinn_lw_on) return
         if (allocated(pinn_lw_taug)) deallocate(pinn_lw_taug, pinn_lw_fracs)
         allocate(pinn_lw_taug(ncol, nlay + 1, ngptlw), pinn_lw_fracs(ncol, nlay + 1, ngptlw))
         call cpu_time(t0)
-        call c_pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
+        ok = c_pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                   h2o, o3, co2, ch4, n2o, o2, pinn_lw_taug, pinn_lw_fracs)
+        pinn_lw_ok = (ok /= 0)
         call cpu_time(t1)
         print *, "[PINN] precompute_lw ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
       end subroutine pinn_precompute_lw
@@ -97,7 +101,7 @@
         real(rb), intent(in) :: minorfrac(:), scaleminor(:), scaleminorn2(:)
         real(rb), intent(out) :: fracs(:,:), taug(:,:)
         pinn_lw_col = pinn_lw_col + 1
-        if (pinn_lw_on .and. pinn_lw_col <= size(pinn_lw_taug, 1)) then
+        if (pinn_lw_on .and. pinn_lw_ok .and. pinn_lw_col <= size(pinn_lw_taug, 1)) then
           fracs(1:nlayers+1, 1:ngptlw) = pinn_lw_fracs(pinn_lw_col, 1:nlayers+1, 1:ngptlw)
           taug(1:nlayers+1, 1:ngptlw)  = pinn_lw_taug(pinn_lw_col, 1:nlayers+1, 1:ngptlw)
         else

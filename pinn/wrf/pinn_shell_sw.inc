@@ -13,6 +13,7 @@
       use rrtmg_sw_taumol, only: taumol_sw_ref
       implicit none
       logical :: pinn_sw_on = .false.
+      logical :: pinn_sw_ok = .false.
       logical :: pinn_sw_init_done = .false.
       integer(im) :: pinn_sw_col = 0
       real(4), allocatable :: pinn_sw_taug(:, :, :), pinn_sw_taur(:, :, :)  ! (ncol, nlay, ngptsw)
@@ -20,14 +21,15 @@
         subroutine c_pinn_init(m) bind(C, name="pinn_torch_init")
           character(len=1), intent(in) :: m(*)
         end subroutine c_pinn_init
-        subroutine c_pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
-                                        h2o, o3, co2, ch4, n2o, o2, taug, taur) &
-             bind(C, name="pinn_torch_precompute_sw")
+        function c_pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
+                                     h2o, o3, co2, ch4, n2o, o2, taug, taur) &
+             result(ok) bind(C, name="pinn_torch_precompute_sw")
+          integer :: ok
           integer, value, intent(in) :: ncol, nlay
           real(4), intent(in) :: play(*), plev(*), tlay(*), tlev(*), tsfc(*)
           real(4), intent(in) :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
           real(4), intent(out) :: taug(*), taur(*)
-        end subroutine c_pinn_precompute_sw
+        end function c_pinn_precompute_sw
       end interface
       contains
       subroutine pinn_sw_init_once()
@@ -60,14 +62,16 @@
         real(rb), intent(in) :: play(:,:), plev(:,:), tlay(:,:), tlev(:,:), tsfc(:)
         real(rb), intent(in) :: h2o(:,:), o3(:,:), co2(:,:), ch4(:,:), n2o(:,:), o2(:,:)
         real :: t0, t1
+        integer :: ok
         call pinn_sw_init_once()
         pinn_sw_col = 0
         if (.not. pinn_sw_on) return
         if (allocated(pinn_sw_taug)) deallocate(pinn_sw_taug, pinn_sw_taur)
         allocate(pinn_sw_taug(ncol, nlay, ngptsw), pinn_sw_taur(ncol, nlay, ngptsw))
         call cpu_time(t0)
-        call c_pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
+        ok = c_pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                   h2o, o3, co2, ch4, n2o, o2, pinn_sw_taug, pinn_sw_taur)
+        pinn_sw_ok = (ok /= 0)
         call cpu_time(t1)
         print *, "[PINN] precompute_sw ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
       end subroutine pinn_precompute_sw
@@ -89,7 +93,7 @@
                            laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
                            selffac, selffrac, indself, forfac, forfrac, indfor, &
                            sfluxzen, taug, taur)
-        if (pinn_sw_on .and. pinn_sw_col <= size(pinn_sw_taug, 1)) then
+        if (pinn_sw_on .and. pinn_sw_ok .and. pinn_sw_col <= size(pinn_sw_taug, 1)) then
           taug(1:nlayers, 1:ngptsw) = pinn_sw_taug(pinn_sw_col, 1:nlayers, 1:ngptsw)
           taur(1:nlayers, 1:ngptsw) = pinn_sw_taur(pinn_sw_col, 1:nlayers, 1:ngptsw)
         end if

@@ -1,13 +1,20 @@
-// Wrapper C++ libtorch pour WRF : precompute batché des épaisseurs optiques
 // taumol_sw / taumol (RRTMG) par un TorchScript (pinn/train_v0.py --export).
-// Appele depuis le shell Fortran (pinn_shell_sw.inc / pinn_shell_lw.inc) inséré
+// Appele depuis le shell Fortran (pinn_shell_sw.inc / pinn_shell_lw.inc) insere
 // dans module_ra_rrtmg_sw.F / module_ra_rrtmg_lw.F par patch_wrf.sh.
 // Layout des entrees/sorties = Fortran column-major : play[i + k*ncol] (i=colonne,
 // k=couche 0..nlay-1), plev[i + l*ncol] (l=0..nlay), taug[i + k*ncol + ig*ncol*nlay].
 // Features = train_v0.build_features (14 features/niveau), le modele fait la
 // normalisation en interne (buffers feat_mean/feat_std).
+//
+// ROBUSTESSE : le shell Fortran peut passer une chaine non terminee par NUL
+// (buffer rempli de blancs) -> lecture bornee (strnlen) + strip des blancs/NUL
+// de fin. Toute exception est rattrapee : init -> g_on=false, precompute ->
+// retourne 0, et le shell Fortran retombe sur taumol_sw_ref / taumol_ref
+// (jamais d'abort du run).
 #include <torch/script.h>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
 #include <vector>
 #include <string>
 
@@ -52,10 +59,10 @@ static void build_X(int ncol, int nlay,
       xa[i][l][2] = (float)tlayn[l];
       xa[i][l][3] = (float)log10(h2on[l] + 1e-12);
       xa[i][l][4] = (float)log10(o3n[l] + 1e-12);
-      xa[i][l][5] = (float)co2n[l];
-      xa[i][l][6] = (float)ch4n[l];
-      xa[i][l][7] = (float)n2on[l];
-      xa[i][l][8] = (float)o2n[l];
+      xa[i][l][5] = co2n[l];
+      xa[i][l][6] = ch4n[l];
+      xa[i][l][7] = n2on[l];
+      xa[i][l][8] = o2n[l];
       xa[i][l][9] = tsfc[i];
       xa[i][l][10] = (float)log10(colh[l] + 1e-12);
       xa[i][l][11] = (float)log10(colo[l] + 1e-12);
@@ -66,58 +73,79 @@ static void build_X(int ncol, int nlay,
 }
 
 extern "C" void pinn_torch_init(const char* path) {
-  g_model = torch::jit::load(std::string(path));
-  g_model.eval();
-  g_on = true;
+  try {
+    size_t n = strnlen(path, 4096);
+    std::string p(path, n);
+    while (!p.empty() && (p.back() == ' ' || p.back() == '\0')) p.pop_back();
+    g_model = torch::jit::load(p);
+    g_model.eval();
+    g_on = true;
+    fprintf(stderr, "[PINN] torch: modele charge: %s\n", p.c_str());
+  } catch (const std::exception& e) {
+    g_on = false;
+    fprintf(stderr, "[PINN] ECHEC chargement modele (%s) -> fallback Fortran taumol\n", e.what());
+  }
 }
 
-extern "C" bool pinn_torch_is_on() { return g_on; }
+extern "C" int pinn_torch_is_on() { return g_on ? 1 : 0; }
 
-extern "C" void pinn_torch_precompute_sw(int ncol, int nlay,
+extern "C" int pinn_torch_precompute_sw(int ncol, int nlay,
                                          const float* play, const float* plev, const float* tlay, const float* tlev, const float* tsfc,
                                          const float* h2o, const float* o3, const float* co2, const float* ch4,
                                          const float* n2o, const float* o2,
                                          float* taug, float* taur) {
-  if (!g_on) return;
-  torch::Tensor X;
-  build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
-  torch::NoGradGuard guard;
-  auto out = g_model.forward({X}).toTuple()->elements();
-  auto t_sw = out[0].toTensor().contiguous();
-  auto r_sw = out[1].toTensor().contiguous();
-  const int NGPT = 112;
-  auto ta = t_sw.accessor<float, 3>();
-  auto ra = r_sw.accessor<float, 3>();
-  for (int i = 0; i < ncol; i++)
-    for (int k = 0; k < nlay; k++)
-      for (int ig = 0; ig < NGPT; ig++) {
-        size_t idx = (size_t)i + (size_t)k * ncol + (size_t)ig * ncol * nlay;
-        taug[idx] = ta[i][k][ig];
-        taur[idx] = ra[i][k][ig];
-      }
+  if (!g_on) return 0;
+  try {
+    torch::Tensor X;
+    build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
+    torch::NoGradGuard guard;
+    auto out = g_model.forward({X}).toTuple()->elements();
+    auto t_sw = out[0].toTensor().contiguous();
+    auto r_sw = out[1].toTensor().contiguous();
+    const int NGPT = 112;
+    auto ta = t_sw.accessor<float, 3>();
+    auto ra = r_sw.accessor<float, 3>();
+    for (int i = 0; i < ncol; i++)
+      for (int k = 0; k < nlay; k++)
+        for (int ig = 0; ig < NGPT; ig++) {
+          size_t idx = (size_t)i + (size_t)k * ncol + (size_t)ig * ncol * nlay;
+          taug[idx] = ta[i][k][ig];
+          taur[idx] = ra[i][k][ig];
+        }
+    return 1;
+  } catch (const std::exception& e) {
+    fprintf(stderr, "[PINN] precompute_sw ECHEC (%s) -> fallback Fortran\n", e.what());
+    return 0;
+  }
 }
 
-extern "C" void pinn_torch_precompute_lw(int ncol, int nlay,
+extern "C" int pinn_torch_precompute_lw(int ncol, int nlay,
                                          const float* play, const float* plev, const float* tlay, const float* tlev, const float* tsfc,
                                          const float* h2o, const float* o3, const float* co2, const float* ch4,
                                          const float* n2o, const float* o2,
                                          float* taug_lw, float* fracs_lw) {
-  if (!g_on) return;
-  torch::Tensor X;
-  build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
-  torch::NoGradGuard guard;
-  auto out = g_model.forward({X}).toTuple()->elements();
-  auto t_lw = out[2].toTensor().contiguous();   // (ncol, nlay+1, 140)
-  auto f_lw = out[3].toTensor().contiguous();
-  const int NGPT = 140;
-  const int L = nlay + 1;
-  auto ta = t_lw.accessor<float, 3>();
-  auto fa = f_lw.accessor<float, 3>();
-  for (int i = 0; i < ncol; i++)
-    for (int l = 0; l < L; l++)
-      for (int ig = 0; ig < NGPT; ig++) {
-        size_t idx = (size_t)i + (size_t)l * ncol + (size_t)ig * ncol * L;
-        taug_lw[idx] = ta[i][l][ig];
-        fracs_lw[idx] = fa[i][l][ig];
-      }
+  if (!g_on) return 0;
+  try {
+    torch::Tensor X;
+    build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
+    torch::NoGradGuard guard;
+    auto out = g_model.forward({X}).toTuple()->elements();
+    auto t_lw = out[2].toTensor().contiguous();   // (ncol, nlay+1, 140)
+    auto f_lw = out[3].toTensor().contiguous();
+    const int NGPT = 140;
+    const int L = nlay + 1;
+    auto ta = t_lw.accessor<float, 3>();
+    auto fa = f_lw.accessor<float, 3>();
+    for (int i = 0; i < ncol; i++)
+      for (int l = 0; l < L; l++)
+        for (int ig = 0; ig < NGPT; ig++) {
+          size_t idx = (size_t)i + (size_t)l * ncol + (size_t)ig * ncol * L;
+          taug_lw[idx] = ta[i][l][ig];
+          fracs_lw[idx] = fa[i][l][ig];
+        }
+    return 1;
+  } catch (const std::exception& e) {
+    fprintf(stderr, "[PINN] precompute_lw ECHEC (%s) -> fallback Fortran\n", e.what());
+    return 0;
+  }
 }
