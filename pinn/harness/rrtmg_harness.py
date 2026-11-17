@@ -52,7 +52,9 @@ class RRTMG_Taumol:
         # signature Fortran: (nlay, play,plev,tlay,tlev, tsfc, h2o..o2) ; sorties via variables bind(C)
         lib.pinn_sw_debug.argtypes = [ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6
         lib.pinn_sw_debug.restype = None
-        lib.pinn_sw_sfluxzen.argtypes = [ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6 + [fp]
+        # NB: tsfc est un scalaire bind(C) SANS value -> by reference : argtype fp
+        # (ctypes passe alors le c_float en byref). Ne PAS mettre c_float ici.
+        lib.pinn_sw_sfluxzen.argtypes = [ctypes.c_int] + [fp] * 11
         lib.pinn_sw_sfluxzen.restype = None
         self.lib = lib
         lib.pinn_sw_init(data_file(sw_data).encode())
@@ -163,10 +165,11 @@ class RRTMG_Rad:
         lib.pinn_rad_init.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
         lib.pinn_rad_init.restype = None
         fp = ctypes.POINTER(ctypes.c_float)
-        lib.pinn_sw_rad.argtypes = ([ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6
+        # tsfc by ref (pas value dans le Fortran) -> fp ; cossza/alb/emis ont value -> c_float
+        lib.pinn_sw_rad.argtypes = ([ctypes.c_int] + [fp] * 11
                                     + [ctypes.c_float, ctypes.c_float] + [fp] * 3)
         lib.pinn_sw_rad.restype = None
-        lib.pinn_lw_rad.argtypes = ([ctypes.c_int] + [fp] * 4 + [ctypes.c_float] + [fp] * 6
+        lib.pinn_lw_rad.argtypes = ([ctypes.c_int] + [fp] * 11
                                     + [ctypes.c_float] + [fp] * 2 + [fp] * 3)
         lib.pinn_lw_rad.restype = None
         self.lib = lib
