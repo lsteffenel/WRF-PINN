@@ -116,7 +116,14 @@ Pièges connus du patch/build (corrigés) :
 - les `.inc` n'utilisent **pas** `iso_c_binding` et **pas** l'opérateur `//` : le pipeline
   `.F` de WRF (`/lib/cpp` en mode C, puis `-traditional`) casse `c_char` et avale `//...`
   (commentaire C) → les shells déclarent les types C à la main (`character(len=1)`,
-  `real(4)`, `integer` + `value`) et construisent la chaîne NUL avec `achar(0)`.
+  `real(4)`, `integer` + `value`) et construisent la chaîne NUL avec `achar(0)` ;
+- **le batch PINN est au niveau tuile, pas colonne** : WRF appelle `rrtmg_sw/lw` avec
+  `ncol=1` (boucles `j_loop`/`i_loop` dans les wrappers `RRTMG_SWRAD/LWRAD`), donc
+  `patch_wrf.sh` insère `call pinn_precompute_*_tile(...)` avant le `j_loop` du wrapper
+  (et PAS dans le driver `rrtmg_sw/lw`). Le shell reconstruit les profils 2D de toute la
+  tuile depuis les champs 3D (`p3d/p8w/t3d/t8w/qv3d/o33d/tsk`, gaz constants) dans le même
+  ordre d'énumération (j externe, i interne) que les appels per-column → le compteur
+  `pinn_*_col` reste aligné avec le batch. Chrono : `[PINN] precompute_*_TILE ncol=... cpu=... s`.
 
 Dans le conteneur : `bash /opt/pinn/wrf/build_wrf_pinn.sh em_quarter_ss` (~20-40 min).
 Le PINN est actif **uniquement sous demande**, via l'env au run :
