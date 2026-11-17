@@ -81,16 +81,16 @@ extern "C" void pinn_torch_precompute_sw(int ncol, int nlay,
   if (!g_on) return;
   torch::Tensor X;
   build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
-  torch::NoGradGuard ng;
+  torch::NoGradGuard guard;
   auto out = g_model.forward({X}).toTuple()->elements();
   auto t_sw = out[0].toTensor().contiguous();
   auto r_sw = out[1].toTensor().contiguous();
-  const int ng = 112;
+  const int NGPT = 112;
   auto ta = t_sw.accessor<float, 3>();
   auto ra = r_sw.accessor<float, 3>();
   for (int i = 0; i < ncol; i++)
     for (int k = 0; k < nlay; k++)
-      for (int ig = 0; ig < ng; ig++) {
+      for (int ig = 0; ig < NGPT; ig++) {
         size_t idx = (size_t)i + (size_t)k * ncol + (size_t)ig * ncol * nlay;
         taug[idx] = ta[i][k][ig];
         taur[idx] = ra[i][k][ig];
@@ -105,17 +105,17 @@ extern "C" void pinn_torch_precompute_lw(int ncol, int nlay,
   if (!g_on) return;
   torch::Tensor X;
   build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
-  torch::NoGradGuard ng;
+  torch::NoGradGuard guard;
   auto out = g_model.forward({X}).toTuple()->elements();
   auto t_lw = out[2].toTensor().contiguous();   // (ncol, nlay+1, 140)
   auto f_lw = out[3].toTensor().contiguous();
-  const int ng = 140;
+  const int NGPT = 140;
   const int L = nlay + 1;
   auto ta = t_lw.accessor<float, 3>();
   auto fa = f_lw.accessor<float, 3>();
   for (int i = 0; i < ncol; i++)
     for (int l = 0; l < L; l++)
-      for (int ig = 0; ig < ng; ig++) {
+      for (int ig = 0; ig < NGPT; ig++) {
         size_t idx = (size_t)i + (size_t)l * ncol + (size_t)ig * ncol * L;
         taug_lw[idx] = ta[i][l][ig];
         fracs_lw[idx] = fa[i][l][ig];
