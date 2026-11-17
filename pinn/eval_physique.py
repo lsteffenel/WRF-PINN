@@ -85,30 +85,49 @@ def main():
             for k, m in shapes.items():
                 out.create_dataset(f"{tag}/{k}", (0, m), maxshape=(None, m), dtype="f4")
 
+    def dbg(j, msg):
+        if j == 0:
+            print(f"  [col 0] {msg}", flush=True)
+
     for j, i in enumerate(idx):
         P = {k: prof[k][i] for k in prof}
         args_prof = (P["play"], P["plev"], P["tlay"], P["tlev"], float(P["tsfc"]),
                      P["h2o"], P["o3"], P["co2"], P["ch4"], P["n2o"], P["o2"])
 
+        dbg(j, "taumol_sw...")
         taug_sw_r, taur_sw_r = taumol.taumol_sw(*args_prof)
+        dbg(j, f"taumol_sw OK sum={taug_sw_r.sum():.4g}")
+        dbg(j, "taumol_lw...")
         taug_lw_r, fracs_lw_r = taumol.taumol_lw(*args_prof)
+        dbg(j, f"taumol_lw OK sum={taug_lw_r.sum():.4g}")
 
         F = build_features(P["play"], P["plev"], P["tlev"], float(P["tsfc"]),
                            P["h2o"], P["o3"], P["co2"], P["ch4"], P["n2o"], P["o2"])
+        dbg(j, "model...")
         with torch.no_grad():
             pred = model(torch.from_numpy(F[None]))
         taug_sw_p, taur_sw_p, taug_lw_p, fracs_lw_p = [t[0].numpy().astype(np.float64) for t in pred]
+        dbg(j, f"model OK taug_sw_p sum={taug_sw_p.sum():.4g}")
 
         if sfluxzen is None:
             sfluxzen = taumol.sw_sfluxzen(*args_prof)
-            print(f"sfluxzen: min={sfluxzen.min():.4g} max={sfluxzen.max():.4g} sum={sfluxzen.sum():.4g}")
+            print(f"sfluxzen: min={sfluxzen.min():.4g} max={sfluxzen.max():.4g} sum={sfluxzen.sum():.4g}", flush=True)
 
+        dbg(j, "sw_rad ref (spcvmc_sw)...")
         fdn_r, fup_r, hr_sw_r = rad_ref.sw_rad(*args_prof, args.cossza, args.alb)
+        dbg(j, f"sw_rad ref OK fdn[0]={fdn_r[0]:.3f} fup[-1]={fup_r[-1]:.3f} hr0={hr_sw_r[0]:.4f}")
+        dbg(j, "set_sw_ext...")
         rad_pinn.set_sw_ext(taug_sw_p, taur_sw_p, sfluxzen)
+        dbg(j, "sw_rad pinn (shell)...")
         fdn_p, fup_p, hr_sw_p = rad_pinn.sw_rad(*args_prof, args.cossza, args.alb)
+        dbg(j, f"sw_rad pinn OK fdn[0]={fdn_p[0]:.3f} (ref {fdn_r[0]:.3f})")
 
+        dbg(j, "lw_rad ref (rtrnmc)...")
         lfup_r, lfdn_r, hr_lw_r = rad_ref.lw_rad(*args_prof, args.emis, taug_lw_r, fracs_lw_r)
+        dbg(j, f"lw_rad ref OK ld[0]={lfdn_r[0]:.3f} lu[-1]={lfup_r[-1]:.3f}")
+        dbg(j, "lw_rad pinn...")
         lfup_p, lfdn_p, hr_lw_p = rad_ref.lw_rad(*args_prof, args.emis, taug_lw_p, fracs_lw_p)
+        dbg(j, f"lw_rad pinn OK ld[0]={lfdn_p[0]:.3f} (ref {lfdn_r[0]:.3f})")
 
         n = nlay
         fnet_sw_r, fnet_sw_p = fdn_r - fup_r, fdn_p - fup_p
