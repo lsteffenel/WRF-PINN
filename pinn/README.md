@@ -76,12 +76,33 @@ pour l'intégration WRF (libtorch).
     --epochs 200 --export
 ```
 
+## harness/build_rad.sh + eval_physique.py — évaluation physique (flux, heating rates)
+
+`build_rad.sh` compile deux bibliothèques de transfert radiatif clear-sky :
+- `build/rad_ref/librrtmg_rad_ref.so` : `spcvmc_sw` appelle le vrai `taumol_sw` (référence) ;
+- `build/rad_pinn/librrtmg_rad_pinn.so` : `taumol_sw` remplacé par un shell
+  (`pinn_taumol_shell.f90`) qui lit `taug/taur` injectés depuis Python
+  (`pinn_taug_ext/pinn_taur_ext`) ; `sfluxzen` (indépendant du profil) est lu une
+  fois via `pinn_sw_sfluxzen` du .so taumol de référence.
+Wrapper `pinn_rad_api.f90` : `pinn_rad_init`, `pinn_sw_rad` (inatm_sw + setcoef_sw +
+spcvmc_sw → flux W/m² + swhr), `pinn_lw_rad` (inatm + setcoef + rtrnmc avec
+taug/fracs en entrée → flux + htr).
+
+`eval_physique.py` compare, sur `--n` colonnes du HDF5, les flux/heating rates
+Fortran-réf vs PINN (TorchScript) :
+
+```bash
+bash /opt/pinn/harness/build.sh && bash /opt/pinn/harness/build_rad.sh
+/opt/conda/envs/pinn/bin/python3 /opt/pinn/eval_physique.py \
+    --h5 /opt/data/taumol_dataset.h5 --model /opt/data/taumol_v2.script.pt \
+    --n 200 --cossza 0.5 --out /opt/data/eval_physique.h5
+```
+
 ## Étapes suivantes
 
 1. ✅ harness standalone OK (smoke test : taug/taur SW + taug/fracs LW positifs).
 2. ✅ `gen_dataset.py` : dataset HDF5 depuis les wrfout (voir ci-dessus).
-3. `train_v0.py` : modèle v0 PyTorch GPU entraîné sur le HDF5 (voir ci-dessus), export TorchScript.
-4. Évaluation **physique** : comparer les heating rates / flux obtenus en
-   remplaçant taumol dans le schéma (pas une MSE de τ).
+3. ✅ `train_v0.py` v2 : toutes les métriques τ>1e-2 < 6 % (taur_sw 0,3 %, taug_sw 6 %, taug_lw 3,4 %, fracs 0,14 %), export TorchScript.
+4. `eval_physique.py` : évaluation physique (flux/heating rates Fortran vs PINN, voir ci-dessus).
 5. Intégration WRF : `bind(C)` + libtorch batché par tile, remplacement dans
    `module_ra_rrtmg_sw/lw`.
