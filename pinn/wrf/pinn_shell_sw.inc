@@ -18,9 +18,10 @@
       integer(im) :: pinn_sw_col = 0
       real(4), allocatable :: pinn_sw_taug(:, :, :), pinn_sw_taur(:, :, :)  ! (ncol, nlay, ngptsw)
       interface
-        subroutine c_pinn_init(m) bind(C, name="pinn_torch_init")
+        function c_pinn_init(m) result(ok) bind(C, name="pinn_torch_init")
+          integer :: ok
           character(len=1), intent(in) :: m(*)
-        end subroutine c_pinn_init
+        end function c_pinn_init
         function c_pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                      h2o, o3, co2, ch4, n2o, o2, taug, taur) &
              result(ok) bind(C, name="pinn_torch_precompute_sw")
@@ -36,7 +37,7 @@
         character(len=1024) :: m
         character(len=1025) :: mc
         character(len=64) :: fl
-        integer :: ios, ios2, fv, l
+        integer :: ios, ios2, fv, l, ok
         if (pinn_sw_init_done) return
         pinn_sw_init_done = .true.
         call get_environment_variable("PINN_MODEL", m, status=ios)
@@ -52,7 +53,11 @@
         l = len_trim(m)
         mc = achar(0)
         mc(1:l) = m(1:l)
-        call c_pinn_init(mc)
+        ok = c_pinn_init(mc)
+        if (ok == 0) then
+          print *, "[PINN] SW: echec chargement modele -> Fortran taumol_sw_ref"
+          return
+        end if
         pinn_sw_on = .true.
         print *, "[PINN] SW: modele charge: ", trim(m)
       end subroutine pinn_sw_init_once

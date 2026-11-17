@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <stdexcept>
 #include <vector>
 #include <string>
 
@@ -72,18 +73,25 @@ static void build_X(int ncol, int nlay,
   }
 }
 
-extern "C" void pinn_torch_init(const char* path) {
+extern "C" int pinn_torch_init(const char* path) {
   try {
+    // Le shell Fortran peut passer un buffer non NUL-termine (rempli de blancs,
+    // voire de garbage apres) : lecture bornee (strnlen) puis coupure au
+    // premier blanc/NUL (les chemins de modele n'ont pas d'espace).
     size_t n = strnlen(path, 4096);
     std::string p(path, n);
-    while (!p.empty() && (p.back() == ' ' || p.back() == '\0')) p.pop_back();
+    size_t cut = p.find_first_of(" \t\r\n");
+    if (cut != std::string::npos) p.resize(cut);
+    if (p.empty()) throw std::runtime_error("chemin de modele vide");
     g_model = torch::jit::load(p);
     g_model.eval();
     g_on = true;
     fprintf(stderr, "[PINN] torch: modele charge: %s\n", p.c_str());
+    return 1;
   } catch (const std::exception& e) {
     g_on = false;
     fprintf(stderr, "[PINN] ECHEC chargement modele (%s) -> fallback Fortran taumol\n", e.what());
+    return 0;
   }
 }
 
