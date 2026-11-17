@@ -24,7 +24,13 @@ for c in "$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++" "$CONDA_PREFIX/bin/g++" 
 done
 if [ -z "$CXX" ]; then
   echo "Aucun g++ >= 9 trouve -> install conda-forge gxx_linux-64..."
-  conda install -y -n pinn -c conda-forge "gxx_linux-64>=11" || { echo "ECHEC install gxx"; exit 1; }
+  # conda n'est pas forcement dans le PATH root du conteneur : le chercher
+  CONDA_BIN=""
+  for c in "${CONDA_EXE:-}" "$CONDA_PREFIX/bin/conda" /opt/conda/bin/conda /opt/conda/condabin/conda; do
+    if [ -n "$c" ] && [ -x "$c" ]; then CONDA_BIN="$c"; break; fi
+  done
+  [ -n "$CONDA_BIN" ] || { echo "ECHEC: binaire conda introuvable"; exit 1; }
+  "$CONDA_BIN" install -y -p "$CONDA_PREFIX" -c conda-forge "gxx_linux-64>=11" || { echo "ECHEC install gxx"; exit 1; }
   CXX="$CONDA_PREFIX/bin/x86_64-conda-linux-gnu-g++"
 fi
 echo "CXX=$CXX ($("$CXX" -dumpversion))"
