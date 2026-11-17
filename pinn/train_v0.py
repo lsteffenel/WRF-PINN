@@ -140,13 +140,9 @@ def loss_and_metrics(pred, y_sw, y_lw, w_sw, w_taur, w_lw):
     y_taur_sw = y_sw[..., NGPTSW:].clamp_min(-0.5)
     y_taug_lw = y_lw[..., :NGPTLW].clamp_min(-0.5)
     y_fracs = y_lw[..., NGPTLW:]
-    # poids 1+log1p(y) sur taug : les grosses epaisseurs optiques (basses couches,
-    # fenetre IR) dominent les flux -> la MSE log1p uniforme les sous-estime
-    w_taug_sw = 1.0 + torch.log1p(y_taug_sw.clamp_min(0))
-    w_taug_lw = 1.0 + torch.log1p(y_taug_lw.clamp_min(0))
-    l_taug_sw = torch.mean(w_taug_sw * (torch.log1p(taug_sw.clamp_min(0)) - torch.log1p(y_taug_sw)) ** 2)
+    l_taug_sw = torch.mean((torch.log1p(taug_sw.clamp_min(0)) - torch.log1p(y_taug_sw)) ** 2)
     l_taur_sw = torch.mean((torch.log10(taur_sw.clamp_min(1e-12)) - torch.log10(y_taur_sw.clamp_min(1e-12))) ** 2)
-    l_taug_lw = torch.mean(w_taug_lw * (torch.log1p(taug_lw.clamp_min(0)) - torch.log1p(y_taug_lw)) ** 2)
+    l_taug_lw = torch.mean((torch.log1p(taug_lw.clamp_min(0)) - torch.log1p(y_taug_lw)) ** 2)
     l_fracs = torch.mean((fracs_lw - y_fracs) ** 2)
     loss = w_sw * (l_taug_sw + w_taur * l_taur_sw) + w_lw * (l_taug_lw + l_fracs)
     with torch.no_grad():
@@ -177,8 +173,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--h5", default="/opt/data/taumol_dataset.h5")
     ap.add_argument("--out", default="/opt/data/taumol_v0.pt")
-    ap.add_argument("--epochs", type=int, default=200)
-    ap.add_argument("--batch", type=int, default=256)
+    ap.add_argument("--epochs", type=int, default=150)
+    ap.add_argument("--batch", type=int, default=512)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--val-frac", type=float, default=0.1)
     ap.add_argument("--seed", type=int, default=0)
@@ -187,7 +183,7 @@ def main():
     ap.add_argument("--w-sw", type=float, default=1.0)
     ap.add_argument("--w-taur", type=float, default=5.0, help="poids de taur_sw dans la loss (Rayleigh = colmol*rayl)")
     ap.add_argument("--w-lw", type=float, default=1.0)
-    ap.add_argument("--patience", type=int, default=20)
+    ap.add_argument("--patience", type=int, default=25)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--export", action="store_true", help="exporte aussi un TorchScript <out sans .pt>.script.pt")
     args = ap.parse_args()
