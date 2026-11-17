@@ -238,7 +238,7 @@ contains
     call inatm(1, n, 0, 10, play_l, plev_l, tlay_l, tlev_l, tsfc_l, &
                h2o_l, o3_l, co2_l, ch4_l, n2o_l, o2_l, cfc11_l, cfc12_l, cfc22_l, ccl4_l, &
                emis_l, 2, 0, 0, &
-               cldfmcl, taucmcl, ciwpmcl, clwpmcl, cswpmcl, reicmcl, relqmcl, resnmc, tauaer, &
+               cldfmcl, taucmcl, ciwpmcl, clwpmcl, cswpmcl, reicmcl, relqmcl, resnmcl, tauaer, &
                nlayers, pavel, pz, tavel, tz, tbound, semiss, coldry, &
                wkl, wbrodl, wx_l, pwvcm, inflag, iceflag, liqflag, &
                cldfmc, taucmc, ciwpmc, clwpmc, cswpmc, reicmc, relqmc, resnmc, taua)
