@@ -57,13 +57,14 @@ Génère le dataset d'entraînement en bouclant sur les colonnes (time, y, x) de
 
 ## train_v0.py — modèle v0 (PyTorch GPU, env `pinn`)
 
-MLP partagé sur les niveaux verticaux. Par niveau (nlay+1), 13 features brutes
+MLP partagé sur les niveaux verticaux. Par niveau (nlay+1), 14 features brutes
 (`log10(plev)`, `tlev`, `tlay` au niveau, `log10(h2o/o3)` au niveau, `co2/ch4/n2o/o2`,
-`tsfc`, `log10` des colonnes h2o/o3 intégrées au-dessus du niveau, `log10(dp)`
-épaisseur de couche en hPa — le Rayleigh `taur_sw` en dépend) → standardisées
-(buffers du module) → MLP (512×3) → 504 sorties/niveau : `log1p(taug_sw)` 112,
-`log1p(taur_sw)` 112 (couches 0..nlay−1), `log1p(taug_lw)` 140, `logit(fracs_lw)` 140
-(niveaux 0..nlay). Loss = MSE en log1p (poids `--w-taur` sur taur) + MSE (fracs).
+`tsfc`, `log10` des colonnes h2o/o3 intégrées au-dessus du niveau, `log10(dp)`,
+`colmol=dp*100/g` en kg/m2 linéaire) → standardisées (buffers du module) → MLP
+(512×3) → 504 sorties/niveau : `log1p(taug_sw)` 112 (couches 0..nlay−1),
+`log10(taur_sw)` 112 (`taur=colmol(lay)*rayl(ig)` dans `taumol_sw`, dépend linéairement
+de `colmol` et couvre 1e-7..0,26 → log10), `log1p(taug_lw)` 140, `logit(fracs_lw)` 140
+(niveaux 0..nlay). Loss = MSE log1p (taug) + log10 (taur, poids `--w-taur`) + MSE (fracs).
 Split 90/10, Adam + ReduceLROnPlateau + early stopping. Métriques : erreur relative
 médiane globale **et** restreinte aux τ > 1e-2 (les g-points quasi transparents
 faussent la médiane brute). `--export` produit un TorchScript (`*.script.pt`)

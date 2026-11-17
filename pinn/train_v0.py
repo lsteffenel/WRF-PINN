@@ -1,15 +1,17 @@
 """Modele v0 (PyTorch GPU) : emulation de taumol_sw / taumol (RRTMG) depuis le dataset HDF5.
 
 Architecture : MLP partage sur les niveaux verticaux. Par niveau i (nlay+1 niveaux),
-13 features brutes = [log10(plev), tlev, tlay_niv, log10(h2o_niv), log10(o3_niv),
-co2, ch4, n2o, o2, tsfc, log10(col_h2o_above), log10(col_o3_above), log10(dp_couche)]
+14 features brutes = [log10(plev), tlev, tlay_niv, log10(h2o_niv), log10(o3_niv),
+co2, ch4, n2o, o2, tsfc, log10(col_h2o_above), log10(col_o3_above), log10(dp_couche),
+colmol_couche = dp*100/g en kg/m2 (lineaire ; taur_sw = colmol(lay)*rayl(ig) en depend
+lineairement, cf. taumol_sw WRF 4.6.1))
 -> standardisees (buffers du module) -> MLP -> 504 sorties par niveau :
   [0:112]    = log1p(taug_sw)   (positions 0..nlay-1 = couches SW)
-  [112:224]  = log1p(taur_sw)
+  [112:224]  = log10(taur_sw)   (taur couvre 1e-7..0.26 : log10, pas log1p)
   [224:364]  = log1p(taug_lw)   (positions 0..nlay)
   [364:504]  = logit(fracs_lw)
-Loss : MSE en log1p pour taug/taur (poids --w-taur sur taur, Rayleigh depend de
-dp_couche), MSE pour fracs (sigmoid). Metriques : erreur relative mediane globale
+Loss : MSE en log1p pour taug_sw/taug_lw, en log10 pour taur_sw (poids --w-taur,
+Rayleigh = colmol(lay)*rayl(ig)), MSE pour fracs (sigmoid). Metriques : erreur relative mediane globale
 et restreinte aux tau > 1e-2 (les g-points quasi transparents faussent la mediane).
 Export TorchScript (--export) pour l'integration WRF ulterieure (libtorch).
 
@@ -24,7 +26,7 @@ from typing import Tuple
 
 import numpy as np
 
-NFEAT = 13
+NFEAT = 14
 NGPTSW = 112
 NGPTLW = 140
 NOUT = 2 * NGPTSW + 2 * NGPTLW
@@ -74,7 +76,7 @@ def build_features(play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
         np.log10(h2o_n + 1e-12), np.log10(o3_n + 1e-12),
         co2_n, ch4_n, n2o_n, o2_n, np.full(L, float(tsfc)),
         np.log10(colh2o + 1e-12), np.log10(colo3 + 1e-12),
-        np.log10(dp_n + 1e-12),
+        np.log10(dp_n + 1e-12), dp_n * 100.0 / 9.80665,
     ], axis=1)
     return F.astype(np.float32)
 
@@ -119,7 +121,7 @@ def make_model(hidden, nhidden):
             B, L, F = Z.shape
             H = self.net(Z.reshape(B * L, F)).reshape(B, L, self.nout)
             taug_sw = torch.expm1(H[:, :-1, 0:self.ngptsw])
-            taur_sw = torch.expm1(H[:, :-1, self.ngptsw:2 * self.ngptsw])
+            taur_sw = torch.pow(10.0, H[:, :-1, self.ngptsw:2 * self.ngptsw].clamp(-12.0, 2.0))
             taug_lw = torch.expm1(H[:, :, 2 * self.ngptsw:2 * self.ngptsw + self.ngptlw])
             fracs_lw = torch.sigmoid(H[:, :, 2 * self.ngptsw + self.ngptlw:])
             return taug_sw, taur_sw, taug_lw, fracs_lw
@@ -135,7 +137,7 @@ def loss_and_metrics(pred, y_sw, y_lw, w_sw, w_taur, w_lw):
     y_taug_lw = y_lw[..., :NGPTLW].clamp_min(-0.5)
     y_fracs = y_lw[..., NGPTLW:]
     l_taug_sw = torch.mean((torch.log1p(taug_sw.clamp_min(0)) - torch.log1p(y_taug_sw)) ** 2)
-    l_taur_sw = torch.mean((torch.log1p(taur_sw.clamp_min(0)) - torch.log1p(y_taur_sw)) ** 2)
+    l_taur_sw = torch.mean((torch.log10(taur_sw.clamp_min(1e-12)) - torch.log10(y_taur_sw.clamp_min(1e-12))) ** 2)
     l_taug_lw = torch.mean((torch.log1p(taug_lw.clamp_min(0)) - torch.log1p(y_taug_lw)) ** 2)
     l_fracs = torch.mean((fracs_lw - y_fracs) ** 2)
     loss = w_sw * (l_taug_sw + w_taur * l_taur_sw) + w_lw * (l_taug_lw + l_fracs)
@@ -175,7 +177,7 @@ def main():
     ap.add_argument("--hidden", type=int, default=512)
     ap.add_argument("--nhidden", type=int, default=3)
     ap.add_argument("--w-sw", type=float, default=1.0)
-    ap.add_argument("--w-taur", type=float, default=10.0, help="poids de taur_sw dans la loss (Rayleigh ~ dp)")
+    ap.add_argument("--w-taur", type=float, default=5.0, help="poids de taur_sw dans la loss (Rayleigh = colmol*rayl)")
     ap.add_argument("--w-lw", type=float, default=1.0)
     ap.add_argument("--patience", type=int, default=20)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
