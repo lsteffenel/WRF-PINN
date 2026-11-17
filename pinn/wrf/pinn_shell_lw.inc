@@ -30,28 +30,40 @@
       contains
       subroutine pinn_lw_init_once()
         character(len=1024) :: m
-        integer :: ios
+        character(len=64) :: fl
+        integer :: ios, ios2, fv
         if (pinn_lw_init_done) return
         pinn_lw_init_done = .true.
         call get_environment_variable("PINN_MODEL", m, status=ios)
-        if (ios == 0 .and. len_trim(m) > 0) then
-          call c_pinn_init(trim(m)//c_null_char)
-          pinn_lw_on = .true.
-          print *, "[PINN] LW: modele charge: ", trim(m)
+        if (ios /= 0 .or. len_trim(m) == 0) return
+        if (trim(m) == "off" .or. trim(m) == "none" .or. trim(m) == "fortran") return
+        fv = 1
+        call get_environment_variable("PINN_LW", fl, status=ios2)
+        if (ios2 == 0 .and. len_trim(fl) > 0) read(fl, *, iostat=ios2) fv
+        if (fv == 0) then
+          print *, "[PINN] LW desactive (PINN_LW=0), Fortran taumol"
+          return
         end if
+        call c_pinn_init(trim(m)//c_null_char)
+        pinn_lw_on = .true.
+        print *, "[PINN] LW: modele charge: ", trim(m)
       end subroutine pinn_lw_init_once
       subroutine pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                     h2o, o3, co2, ch4, n2o, o2)
         integer(im), intent(in) :: ncol, nlay
         real(rb), intent(in) :: play(:,:), plev(:,:), tlay(:,:), tlev(:,:), tsfc(:)
         real(rb), intent(in) :: h2o(:,:), o3(:,:), co2(:,:), ch4(:,:), n2o(:,:), o2(:,:)
+        real :: t0, t1
         call pinn_lw_init_once()
         pinn_lw_col = 0
         if (.not. pinn_lw_on) return
         if (allocated(pinn_lw_taug)) deallocate(pinn_lw_taug, pinn_lw_fracs)
         allocate(pinn_lw_taug(ncol, nlay + 1, ngptlw), pinn_lw_fracs(ncol, nlay + 1, ngptlw))
+        call cpu_time(t0)
         call c_pinn_precompute_lw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                   h2o, o3, co2, ch4, n2o, o2, pinn_lw_taug, pinn_lw_fracs)
+        call cpu_time(t1)
+        print *, "[PINN] precompute_lw ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
       end subroutine pinn_precompute_lw
       subroutine pinn_reset_lw()
         pinn_lw_col = 0

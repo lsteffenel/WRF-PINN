@@ -30,28 +30,40 @@
       contains
       subroutine pinn_sw_init_once()
         character(len=1024) :: m
-        integer :: ios
+        character(len=64) :: fl
+        integer :: ios, ios2, fv
         if (pinn_sw_init_done) return
         pinn_sw_init_done = .true.
         call get_environment_variable("PINN_MODEL", m, status=ios)
-        if (ios == 0 .and. len_trim(m) > 0) then
-          call c_pinn_init(trim(m)//c_null_char)
-          pinn_sw_on = .true.
-          print *, "[PINN] SW: modele charge: ", trim(m)
+        if (ios /= 0 .or. len_trim(m) == 0) return
+        if (trim(m) == "off" .or. trim(m) == "none" .or. trim(m) == "fortran") return
+        fv = 1
+        call get_environment_variable("PINN_SW", fl, status=ios2)
+        if (ios2 == 0 .and. len_trim(fl) > 0) read(fl, *, iostat=ios2) fv
+        if (fv == 0) then
+          print *, "[PINN] SW desactive (PINN_SW=0), Fortran taumol_sw"
+          return
         end if
+        call c_pinn_init(trim(m)//c_null_char)
+        pinn_sw_on = .true.
+        print *, "[PINN] SW: modele charge: ", trim(m)
       end subroutine pinn_sw_init_once
       subroutine pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                     h2o, o3, co2, ch4, n2o, o2)
         integer(im), intent(in) :: ncol, nlay
         real(rb), intent(in) :: play(:,:), plev(:,:), tlay(:,:), tlev(:,:), tsfc(:)
         real(rb), intent(in) :: h2o(:,:), o3(:,:), co2(:,:), ch4(:,:), n2o(:,:), o2(:,:)
+        real :: t0, t1
         call pinn_sw_init_once()
         pinn_sw_col = 0
         if (.not. pinn_sw_on) return
         if (allocated(pinn_sw_taug)) deallocate(pinn_sw_taug, pinn_sw_taur)
         allocate(pinn_sw_taug(ncol, nlay, ngptsw), pinn_sw_taur(ncol, nlay, ngptsw))
+        call cpu_time(t0)
         call c_pinn_precompute_sw(ncol, nlay, play, plev, tlay, tlev, tsfc, &
                                   h2o, o3, co2, ch4, n2o, o2, pinn_sw_taug, pinn_sw_taur)
+        call cpu_time(t1)
+        print *, "[PINN] precompute_sw ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
       end subroutine pinn_precompute_sw
       subroutine pinn_reset_sw()
         pinn_sw_col = 0
