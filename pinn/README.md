@@ -106,6 +106,14 @@ Remplace `taumol_sw`/`taumol` par le TorchScript (libtorch) dans WRF, batché pa
 - `build_wrf_pinn.sh` : compile `libpinn_torch.so`, patch les sources, configure+compile WRF avec libtorch dans le link.
 - `compare_runs.py` : compare deux wrfout (RTHRATEN*, RSHORT, RLONG, ...).
 
+Pièges connus du patch/build (corrigés) :
+- les `.inc` contiennent un **module complet** : `patch_wrf.sh` les insère **avant** l'ancre
+  (`module rrtmg_sw_spcvmc` / `module rrtmg_lw_rad`, top-level) — jamais après, sinon module
+  imbriqué → erreur Fortran → `libwrflib.a` incomplet → `undefined reference` au link final ;
+- `./compile` de WRF retourne 0 même si le link final échoue (`Error 1 (ignored)`) :
+  `build_wrf_pinn.sh` vérifie donc explicitement `main/ideal.exe` + `main/wrf.exe` et dump
+  les `Error:`/`undefined reference` du log sinon.
+
 Dans le conteneur : `bash /opt/pinn/wrf/build_wrf_pinn.sh em_quarter_ss` (~20-40 min).
 Le PINN est actif **uniquement sous demande**, via l'env au run :
 - `PINN_MODEL=/opt/data/taumol_v6.script.pt` : active SW+LW ; absent ou `off`/`none`/`fortran` -> Fortran pur (meme binaire) ;
