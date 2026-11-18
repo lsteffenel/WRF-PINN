@@ -103,6 +103,11 @@
         ncol = nx * ny
         nlay = nlayers
         nm = kte - kts + 1
+        if (nlay < nm + 1) then
+          print *, "[PINN] tile: nlay < nm+1, fallback Fortran"
+          pinn_lw_ok = .false.
+          return
+        end if
         co2 = (280._rb + 90._rb * exp(0.02_rb * real(yr - 2000, rb))) * 1.e-6_rb
         ch4 = 1774.e-9_rb
         n2o = 319.e-9_rb
