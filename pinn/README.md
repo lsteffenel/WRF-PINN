@@ -116,7 +116,27 @@ Pièges connus du patch/build (corrigés) :
 - les `.inc` n'utilisent **pas** `iso_c_binding` et **pas** l'opérateur `//` : le pipeline
   `.F` de WRF (`/lib/cpp` en mode C, puis `-traditional`) casse `c_char` et avale `//...`
   (commentaire C) → les shells déclarent les types C à la main (`character(len=1)`,
-  `real(4)`, `integer` + `value`) et construisent la chaîne NUL avec `achar(0)`.
+  `real(4)`, `integer` + `value`) et construisent la chaîne NUL avec `achar(0)` ;
+- **le batch PINN est au niveau tuile, pas colonne** : WRF appelle `rrtmg_sw/lw` avec
+  `ncol=1` (boucles `j_loop`/`i_loop` dans les wrappers `RRTMG_SWRAD/LWRAD`), donc
+  `patch_wrf.sh` insère `call pinn_precompute_*_tile(...)` avant le `j_loop` du wrapper
+  (et PAS dans le driver `rrtmg_sw/lw`). Le shell reconstruit les profils 2D de toute la
+  tuile depuis les champs 3D (`p3d/p8w/t3d/t8w/qv3d/o33d/tsk`, gaz constants) dans le même
+  ordre d'énumération (j externe, i interne) que les appels per-column → le compteur
+  `pinn_*_col` reste aligné avec le batch. Chrono : `[PINN] precompute_*_TILE ncol=... cpu=... s`.
+- **fidélité des profils au wrapper** (sinon erreur LW systématique REF-vs-PINN ~100 %) :
+  - couches tampon au-dessus du sommet : `plev(L+1)=plev(L)-4 hPa` dès `L=nm+1` puis
+    `plev(nlay+1)=0` (ne PAS mettre `plev(nm+2)=1e-5` avant la boucle, sinon plev<0 ensuite
+    -> clamps log10 -> taug folles) ; cas `nlay==nm+1` (SW) : `plev(nm+2)=1e-5`, isotherme ;
+  - `tlev` des couches tampon LW : interpolation de la table standard PPROF/TPROF (60 niveaux,
+    recopiée dans le shell) + shift `tlev(L)=varint(L)+(tlev(nm)-varint(nm))`, et
+    `tlay(L-1)=0.5*(tlev(L)+tlev(L-1))` — PAS isotherme ;
+  - **o3** : si `o3input /= 2`, le wrapper écrase o3 par la climatologie `INIRAD` (o33d vaut 0
+    avant le 1er appel radiation) -> le tile appelle `inirad` via `bind(C)` sur le symbole manglé
+    `__module_ra_rrtmg_lw_MOD_inirad` (pas de `use module_ra_rrtmg_lw` = cycle de modules),
+    scalaires sans `value` = par adresse (compatible) ;
+  - `tlay_n` dans `build_X` (C++) = `to_niv(0.5*(tlev[k]+tlev[k+1]))` exactement comme
+    `train_v0.build_features` (double moyenne), pas la simple moyenne.
 
 Dans le conteneur : `bash /opt/pinn/wrf/build_wrf_pinn.sh em_quarter_ss` (~20-40 min).
 Le PINN est actif **uniquement sous demande**, via l'env au run :
