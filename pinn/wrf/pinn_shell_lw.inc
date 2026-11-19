@@ -168,6 +168,7 @@
         pinn_lw_ok = (ok /= 0)
         call cpu_time(t1)
         print *, "[PINN] precompute_lw TILE ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
+        print *, "[PINN] lw TILE taug min/max:", minval(pinn_lw_taug), maxval(pinn_lw_taug), " fracs min/max:", minval(pinn_lw_fracs), maxval(pinn_lw_fracs)
         deallocate(play, plev, tlay, tlev, tsfc, h2o, o3, c2, c4, n2, o22)
       end subroutine pinn_precompute_lw_tile
       subroutine pinn_taumol_lw(nlayers, pavel, wx, coldry, &

@@ -173,6 +173,7 @@
         pinn_sw_ok = (ok /= 0)
         call cpu_time(t1)
         print *, "[PINN] precompute_sw TILE ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
+        print *, "[PINN] sw TILE taug min/max:", minval(pinn_sw_taug), maxval(pinn_sw_taug), " taur min/max:", minval(pinn_sw_taur), maxval(pinn_sw_taur)
         deallocate(play, plev, tlay, tlev, tsfc, h2o, o3, c2, c4, n2, o22)
       end subroutine pinn_precompute_sw_tile
       subroutine taumol_sw(nlayers, colh2o, colco2, colch4, colo2, colo3, colmol, &

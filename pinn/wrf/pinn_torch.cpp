@@ -111,8 +111,10 @@ extern "C" int pinn_torch_precompute_sw(int ncol, int nlay,
     build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
     torch::NoGradGuard guard;
     auto out = g_model.forward({X}).toTuple()->elements();
-    auto t_sw = out[0].toTensor().contiguous();
-    auto r_sw = out[1].toTensor().contiguous();
+    // sanitize: NaN/Inf -> bornes sures (un taug NaN/negatif rend l index de
+    // lookup de table itgas negatif dans spcvmc_sw -> OOB -> SIGSEGV)
+    auto t_sw = torch::nan_to_num(out[0].toTensor().contiguous(), 0.0, 1.0e6, 0.0).clamp(0.0, 1.0e6);
+    auto r_sw = torch::nan_to_num(out[1].toTensor().contiguous(), 0.0, 0.3, 0.0).clamp(1.0e-12, 0.3);
     const int NGPT = 112;
     auto ta = t_sw.accessor<float, 3>();
     auto ra = r_sw.accessor<float, 3>();
@@ -141,8 +143,8 @@ extern "C" int pinn_torch_precompute_lw(int ncol, int nlay,
     build_X(ncol, nlay, play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2, X);
     torch::NoGradGuard guard;
     auto out = g_model.forward({X}).toTuple()->elements();
-    auto t_lw = out[2].toTensor().contiguous();   // (ncol, nlay+1, 140)
-    auto f_lw = out[3].toTensor().contiguous();
+    auto t_lw = torch::nan_to_num(out[2].toTensor().contiguous(), 0.0, 1.0e6, 0.0).clamp(0.0, 1.0e6);   // (ncol, nlay+1, 140)
+    auto f_lw = torch::nan_to_num(out[3].toTensor().contiguous(), 0.5, 1.0, 0.0).clamp(0.0, 1.0);
     const int NGPT = 140;
     const int L = nlay + 1;
     auto ta = t_lw.accessor<float, 3>();
