@@ -14,7 +14,16 @@ VARS = ["RTHRATEN", "RTHRATENLW", "RTHRATENSW", "RSHORT", "RLONG", "RSWOUT", "RL
 
 def main():
     import netCDF4
+    if len(sys.argv) < 3:
+        sys.exit("usage: compare_runs.py <wrfout_ref> <wrfout_pinn>")
     ref, pinn = sys.argv[1], sys.argv[2]
+    import os
+    for p in (ref, pinn):
+        if not p or not os.path.isfile(p):
+            sys.exit(f"ECHEC: fichier introuvable: '{p}' (variables shell vides ?) "
+                     f"-> definir REF=... et PIN=... avant, ex: "
+                     f"REF=$(ls -dt /opt/runs/cases/rrtmg_on_off/run-* | sed -n 2p) "
+                     f"PIN=$(ls -dt /opt/runs/cases/rrtmg_on_off/run-* | head -1)")
     a = netCDF4.Dataset(ref)
     b = netCDF4.Dataset(pinn)
     print(f"ref={ref}\npinn={pinn}")
