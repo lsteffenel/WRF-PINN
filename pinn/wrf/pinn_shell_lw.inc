@@ -103,7 +103,7 @@
         ncol = nx * ny
         nlay = nlayers
         nm = kte - kts + 1
-        if (nlay < nm + 1) then
+        if (nlay < nm) then
           print *, "[PINN] tile: nlay < nm+1, fallback Fortran"
           pinn_lw_ok = .false.
           return
@@ -134,6 +134,7 @@
               n2(icol,kk) = n2o
               o22(icol,kk) = o2
             end do
+            if (nlay >= nm + 1) then
             play(icol,nm+1) = 0.5_rb * plev(icol,nm+1)
             tlay(icol,nm+1) = tlev(icol,nm+1)
             plev(icol,nm+2) = 1.0e-5_rb
@@ -158,6 +159,7 @@
             end do
             plev(icol,nlay+1) = 0.0_rb
             play(icol,nlay) = 0.5_rb * (plev(icol,nlay) + plev(icol,nlay+1))
+            end if
           end do
         end do
         if (allocated(pinn_lw_taug)) deallocate(pinn_lw_taug, pinn_lw_fracs)
