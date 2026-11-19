@@ -55,19 +55,22 @@ static void build_X(int ncol, int nlay,
     above(h2oc, colh);
     above(o3c, colo);
     for (int l = 0; l < L; l++) {
-      xa[i][l][0] = (float)log10((double)plev[i + l * ncol]);
+      // clamp des arguments de log10 : au-dessus du sommet du modele, plev/dp
+      // peuvent etre <= 0 (couches tampon) -> NaN -> taug NaN -> lookup de
+      // table OOB dans rtrnmc/spcvmc (SIGSEGV). max(x, eps) rend tout fini.
+      xa[i][l][0] = (float)log10(std::max((double)plev[i + l * ncol], 1e-6));
       xa[i][l][1] = tlev[i + l * ncol];
       xa[i][l][2] = (float)tlayn[l];
-      xa[i][l][3] = (float)log10(h2on[l] + 1e-12);
-      xa[i][l][4] = (float)log10(o3n[l] + 1e-12);
+      xa[i][l][3] = (float)log10(std::max(h2on[l], 1e-12));
+      xa[i][l][4] = (float)log10(std::max(o3n[l], 1e-12));
       xa[i][l][5] = co2n[l];
       xa[i][l][6] = ch4n[l];
       xa[i][l][7] = n2on[l];
       xa[i][l][8] = o2n[l];
       xa[i][l][9] = tsfc[i];
-      xa[i][l][10] = (float)log10(colh[l] + 1e-12);
-      xa[i][l][11] = (float)log10(colo[l] + 1e-12);
-      xa[i][l][12] = (float)log10(dpn[l] + 1e-12);
+      xa[i][l][10] = (float)log10(std::max(colh[l], 1e-12));
+      xa[i][l][11] = (float)log10(std::max(colo[l], 1e-12));
+      xa[i][l][12] = (float)log10(std::max(dpn[l], 1e-12));
       xa[i][l][13] = (float)(dpn[l] * 100.0 / 9.80665);
     }
   }

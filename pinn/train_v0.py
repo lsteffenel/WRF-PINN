@@ -72,11 +72,11 @@ def build_features(play, plev, tlev, tsfc, h2o, o3, co2, ch4, n2o, o2):
     colh2o = col_above(h2o)
     colo3 = col_above(o3)
     F = np.stack([
-        np.log10(plev), tlev, tlay_n,
-        np.log10(h2o_n + 1e-12), np.log10(o3_n + 1e-12),
+        np.log10(np.maximum(plev, 1e-6)), tlev, tlay_n,
+        np.log10(np.maximum(h2o_n, 1e-12)), np.log10(np.maximum(o3_n, 1e-12)),
         co2_n, ch4_n, n2o_n, o2_n, np.full(L, float(tsfc)),
-        np.log10(colh2o + 1e-12), np.log10(colo3 + 1e-12),
-        np.log10(dp_n + 1e-12), dp_n * 100.0 / 9.80665,
+        np.log10(np.maximum(colh2o, 1e-12)), np.log10(np.maximum(colo3, 1e-12)),
+        np.log10(np.maximum(dp_n, 1e-12)), dp_n * 100.0 / 9.80665,
     ], axis=1)
     return F.astype(np.float32)
 
