@@ -12,6 +12,11 @@ CASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNS_ROOT="${RUNS_ROOT:-/opt/runs}"
 WRF_HOME="${WRF_HOME:-/comsoftware/wrf/WRF-4.6.1}"
 NP="${NP:-8}"
+# Le PINN garde ses buffers batch dans des variables de module (pinn_lw_taug, ...)
+# non thread-safe : avec OMP_NUM_THREADS > 1, le driver radiation tourne en
+# region OMP sur plusieurs tuiles -> race -> SIGSEGV dans rtrnmc. On force 1
+# thread OMP (le parallelisme reste en MPI, NP rangs) pour REF et PINN alike.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 BASE="$RUNS_ROOT/cases/rrtmg_on_off/run-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BASE"
 cd "$BASE"
