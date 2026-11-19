@@ -44,8 +44,11 @@ static void build_X(int ncol, int nlay,
       for (int k = 1; k < nlay; k++) v[k] = 0.5 * ((double)c[i + (k - 1) * ncol] + (double)c[i + k * ncol]);
     };
     to_niv(h2o, h2on); to_niv(o3, o3n); to_niv(co2, co2n); to_niv(ch4, ch4n); to_niv(n2o, n2on); to_niv(o2, o2n);
-    for (int k = 0; k < nlay; k++) { tlayn[k] = tlayc[k]; dpn[k] = dp[k]; }
+    // tlay_n = to_niv(tlay) comme train_v0.build_features (double moyenne des tlev)
+    tlayn[0] = tlayc[0];
     tlayn[nlay] = tlayc[nlay - 1];
+    for (int k = 1; k < nlay; k++) tlayn[k] = 0.5 * (tlayc[k - 1] + tlayc[k]);
+    for (int k = 0; k < nlay; k++) dpn[k] = dp[k];
     dpn[nlay] = dp[nlay - 1];
     auto above = [&](const std::vector<double>& c, std::vector<double>& out) {
       double s = 0.0;

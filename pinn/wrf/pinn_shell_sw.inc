@@ -31,6 +31,14 @@
           real(4), intent(in) :: h2o(*), o3(*), co2(*), ch4(*), n2o(*), o2(*)
           real(4), intent(out) :: taug(*), taur(*)
         end function c_pinn_precompute_sw
+! INIRAD (climatologie ozone) est dans module_ra_rrtmg_lw ; on y accede par le
+! symbole mangle gfortran (pas de use possible, cycle de modules). Scalaires
+! sans value = par adresse, compatible avec la declaration Fortran originale.
+        subroutine pinn_inirad(o3prof, plev, kts, kte) &
+             bind(C, name="__module_ra_rrtmg_lw_MOD_inirad")
+          real(4) :: o3prof(*), plev(*)
+          integer :: kts, kte
+        end subroutine pinn_inirad
       end interface
       contains
       subroutine pinn_sw_init_once()
@@ -90,14 +98,15 @@
 ! en enumerant j externe / i interne = meme ordre que les appels rrtmg_sw
 ! per-column, donc pinn_sw_col reste aligne avec l indice de colonne du batch.
       subroutine pinn_precompute_sw_tile(its, ite, jts, jte, kts, kte, nlayers, &
-                                         p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr)
-        integer(im), intent(in) :: its, ite, jts, jte, kts, kte, nlayers, yr
+                                         p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr, o3input)
+        integer(im), intent(in) :: its, ite, jts, jte, kts, kte, nlayers, yr, o3input
         real(rb), intent(in) :: p3d(:,:,:), p8w(:,:,:), t3d(:,:,:), t8w(:,:,:)
         real(rb), intent(in) :: qv3d(:,:,:), o33d(:,:,:), tsk(:,:)
         integer(im) :: nx, ny, ncol, nlay, nm, i, j, k, kk, L, icol, ok
         real(rb) :: co2, ch4, n2o, o2, t0, t1
         real(rb), allocatable :: play(:,:), plev(:,:), tlay(:,:), tlev(:,:), tsfc(:)
         real(rb), allocatable :: h2o(:,:), o3(:,:), c2(:,:), c4(:,:), n2(:,:), o22(:,:)
+        real(rb), allocatable :: o3mmr(:)
         call pinn_sw_init_once()
         pinn_sw_col = 0
         if (.not. pinn_sw_on) return
@@ -117,6 +126,7 @@
         o2 = 0.209488_rb
         allocate(play(ncol,nlay), plev(ncol,nlay+1), tlay(ncol,nlay), tlev(ncol,nlay+1), tsfc(ncol))
         allocate(h2o(ncol,nlay), o3(ncol,nlay), c2(ncol,nlay), c4(ncol,nlay), n2(ncol,nlay), o22(ncol,nlay))
+        allocate(o3mmr(nlay))
         icol = 0
         do j = jts, jte
           do i = its, ite
@@ -137,24 +147,26 @@
               n2(icol,kk) = n2o
               o22(icol,kk) = o2
             end do
-            ! couche tampon au-dessus du sommet du modele (cf wrapper)
+            ! couche tampon au-dessus du sommet du modele (cf wrapper) :
+            ! nlay == nm+1 -> 1 niveau a plev=1e-5 (cas SW) ; nlay > nm+1 ->
+            ! niveaux a deltap=4 hPa puis plev(nlay+1)=0.
             if (nlay >= nm + 1) then
+            if (nlay == nm + 1) then
             play(icol,nm+1) = 0.5_rb * plev(icol,nm+1)
-            tlay(icol,nm+1) = tlev(icol,nm+1)
             plev(icol,nm+2) = 1.0e-5_rb
+            tlay(icol,nm+1) = tlev(icol,nm+1)
             tlev(icol,nm+2) = tlev(icol,nm+1)
-            h2o(icol,nm+1) = h2o(icol,nm)
-            o3(icol,nm+1) = o3(icol,nm)
-            c2(icol,nm+1) = co2
-            c4(icol,nm+1) = ch4
-            n2(icol,nm+1) = n2o
-            o22(icol,nm+1) = o2
-            ! couches tampons suivantes (deltap=4 hPa, isotherme) jusqua nlayers
-            do L = nm + 2, nlay
-              plev(icol,L+1) = plev(icol,L) - 4._rb
+            else
+            do L = nm + 1, nlay
+              plev(icol,L+1) = plev(icol,L) - 4.0_rb
               play(icol,L) = 0.5_rb * (plev(icol,L) + plev(icol,L+1))
               tlay(icol,L) = tlev(icol,L)
               tlev(icol,L+1) = tlev(icol,L)
+            end do
+            plev(icol,nlay+1) = 0.0_rb
+            play(icol,nlay) = 0.5_rb * (plev(icol,nlay) + plev(icol,nlay+1))
+            end if
+            do L = nm + 1, nlay
               h2o(icol,L) = h2o(icol,nm)
               o3(icol,L) = o3(icol,nm)
               c2(icol,L) = co2
@@ -162,8 +174,14 @@
               n2(icol,L) = n2o
               o22(icol,L) = o2
             end do
-            plev(icol,nlay+1) = 0.0_rb
-            play(icol,nlay) = 0.5_rb * (plev(icol,nlay) + plev(icol,nlay+1))
+            end if
+            ! ozone : si o3input /= 2 le wrapper ecrase o3 par la climatologie
+            ! inirad (o33d vaut 0 a ce stade) ; sinon o33d*amdo.
+            if (o3input /= 2) then
+              call pinn_inirad(o3mmr, plev(icol,:), 1, nlay - 1)
+              do k = 1, nlay
+                o3(icol,k) = o3mmr(k) * 0.603461_rb
+              end do
             end if
           end do
         end do
@@ -176,7 +194,11 @@
         call cpu_time(t1)
         print *, "[PINN] precompute_sw TILE ncol=", ncol, " nlay=", nlay, " cpu=", t1 - t0, " s"
         print *, "[PINN] sw TILE taug min/max:", minval(pinn_sw_taug), maxval(pinn_sw_taug), " taur min/max:", minval(pinn_sw_taur), maxval(pinn_sw_taur)
-        deallocate(play, plev, tlay, tlev, tsfc, h2o, o3, c2, c4, n2, o22)
+        print *, "[PINN] dbg sw tile col1 feat: play,plev1,plevtop,tlay,tlev,h2o,o3,tsfc =", &
+          play(1,1), plev(1,1), plev(1,nlay+1), tlay(1,1), tlev(1,1), h2o(1,1), o3(1,1), tsfc(1)
+        print *, "[PINN] dbg sw tile taug(k=1,ig=1) col1/100/ncol =", &
+          pinn_sw_taug(1,1,1), pinn_sw_taug(min(100,ncol),1,1), pinn_sw_taug(ncol,1,1)
+        deallocate(play, plev, tlay, tlev, tsfc, h2o, o3, c2, c4, n2, o22, o3mmr)
       end subroutine pinn_precompute_sw_tile
       subroutine taumol_sw(nlayers, colh2o, colco2, colch4, colo2, colo3, colmol, &
                            laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &

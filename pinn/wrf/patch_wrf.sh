@@ -53,7 +53,7 @@ awk '
   {print}
 ' "$SW" > "$SW.tmp" && mv "$SW.tmp" "$SW"
 # 5) ... et precompute batch de la tuile AVANT la boucle j du wrapper
-awk -v call='      call pinn_precompute_sw_tile(its, ite, jts, jte, kts, kte, nlay, p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr)' '
+awk -v call='      call pinn_precompute_sw_tile(its, ite, jts, jte, kts, kte, nlay, p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr, o3input)' '
   /j_loop: do j = jts,jte/ && !done {print call; done=1}
   {print}
 ' "$SW" > "$SW.tmp" && mv "$SW.tmp" "$SW"
@@ -83,7 +83,7 @@ awk '
   inw && /IMPLICIT NONE/ && !done {print "   USE module_pinn_shell_lw, ONLY : pinn_precompute_lw_tile"; print; done=1; inw=0; next}
   {print}
 ' "$LW" > "$LW.tmp" && mv "$LW.tmp" "$LW"
-awk -v call='      call pinn_precompute_lw_tile(its, ite, jts, jte, kts, kte, nlayers, p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr)' '
+awk -v call='      call pinn_precompute_lw_tile(its, ite, jts, jte, kts, kte, nlayers, p3d, p8w, t3d, t8w, qv3d, o33d, tsk, yr, o3input)' '
   /j_loop: do j = jts,jte/ && !done {print call; done=1}
   {print}
 ' "$LW" > "$LW.tmp" && mv "$LW.tmp" "$LW"
