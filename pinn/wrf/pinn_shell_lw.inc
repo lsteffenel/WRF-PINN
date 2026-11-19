@@ -21,8 +21,10 @@
       logical :: pinn_lw_on = .false.
       logical :: pinn_lw_ok = .false.
       logical :: pinn_lw_init_done = .false.
+      logical :: pinn_lw_dbg = .false.
       integer(im) :: pinn_lw_col = 0
       real(4), allocatable :: pinn_lw_taug(:, :, :), pinn_lw_fracs(:, :, :)  ! (ncol, mxlay+1, ngptlw)
+      real(rb), allocatable :: pinn_dbg_taug(:,:), pinn_dbg_fracs(:,:)  ! copie taumol_ref (PINN_DEBUG_CMP=1)
 ! Profil standard au-dessus du sommet (recopie de PPROF/TPROF du wrapper
 ! RRTMG_LWRAD, module module_ra_rrtmg_lw) pour tlev des couches tampon.
       integer, parameter :: pinn_nprof = 60
@@ -90,6 +92,8 @@
           print *, "[PINN] LW desactive (PINN_LW=0), Fortran taumol"
           return
         end if
+        call get_environment_variable("PINN_DEBUG_CMP", fl, status=ios2)
+        if (ios2 == 0 .and. (trim(fl) == "1" .or. trim(fl) == "on")) pinn_lw_dbg = .true.
         l = len_trim(m)
         mc = achar(0)
         mc(1:l) = m(1:l)
@@ -260,8 +264,10 @@
           play(1,1), plev(1,1), plev(1,nlay+1), tlay(1,1), tlev(1,1), h2o(1,1), o3(1,1), tsfc(1)
         print *, "[PINN] dbg tile o3 min/max col1, tlev(nm),tlev(nlay+1) =", &
           minval(o3(1,:)), maxval(o3(1,:)), tlev(1,nm), tlev(1,nlay+1)
-        print *, "[PINN] dbg tile taug(k=1,ig=1) col1/100/ncol =", &
-          pinn_lw_taug(1,1,1), pinn_lw_taug(min(100,ncol),1,1), pinn_lw_taug(ncol,1,1)
+        print *, "[PINN] dbg tile col1/100/ncol: taug(k1,ig1) taug(kN,ig1) fracs(1,1) =", &
+          pinn_lw_taug(1,1,1), pinn_lw_taug(1,nlay,1), pinn_lw_fracs(1,1,1), &
+          pinn_lw_taug(min(100,ncol),1,1), pinn_lw_taug(min(100,ncol),nlay,1), pinn_lw_fracs(min(100,ncol),1,1), &
+          pinn_lw_taug(ncol,1,1), pinn_lw_taug(ncol,nlay,1), pinn_lw_fracs(ncol,1,1)
         deallocate(play, plev, tlay, tlev, tsfc, h2o, o3, c2, c4, n2, o22, o3mmr, varint)
       end subroutine pinn_precompute_lw_tile
       subroutine pinn_taumol_lw(nlayers, pavel, wx, coldry, &
@@ -286,12 +292,39 @@
         real(rb), intent(in) :: selffac(:), selffrac(:), forfac(:), forfrac(:)
         real(rb), intent(in) :: minorfrac(:), scaleminor(:), scaleminorn2(:)
         real(rb), intent(out) :: fracs(:,:), taug(:,:)
+        logical :: use_pinn
         pinn_lw_col = pinn_lw_col + 1
-        if (pinn_lw_on .and. pinn_lw_ok .and. pinn_lw_col <= size(pinn_lw_taug, 1)) then
+        use_pinn = pinn_lw_on .and. pinn_lw_ok .and. pinn_lw_col <= size(pinn_lw_taug, 1)
+        ! mode debug : on fait tourner taumol_ref aussi et on compare sur la meme colonne
+        if (pinn_lw_dbg .and. use_pinn) then
+          call taumol_ref(nlayers, pavel, wx, coldry, &
+                          laytrop, jp, jt, jt1, planklay, planklev, plankbnd, &
+                          colh2o, colco2, colo3, coln2o, colco, colch4, colo2, colbrd, &
+                          fac00, fac01, fac10, fac11, &
+                          rat_h2oco2, rat_h2oco2_1, rat_h2oo3, rat_h2oo3_1, &
+                          rat_h2on2o, rat_h2on2o_1, rat_h2och4, rat_h2och4_1, &
+                          rat_n2oco2, rat_n2oco2_1, rat_o3co2, rat_o3co2_1, &
+                          selffac, selffrac, indself, forfac, forfrac, indfor, &
+                          minorfrac, scaleminor, scaleminorn2, indminor, &
+                          fracs, taug)
+          if (.not. allocated(pinn_dbg_taug)) then
+            allocate(pinn_dbg_taug(size(taug,1), size(taug,2)), pinn_dbg_fracs(size(fracs,1), size(fracs,2)))
+          end if
+          pinn_dbg_taug = taug
+          pinn_dbg_fracs = fracs
+        end if
+        if (use_pinn) then
           fracs(1:nlayers+1, 1:ngptlw) = pinn_lw_fracs(pinn_lw_col, 1:nlayers+1, 1:ngptlw)
           taug(1:nlayers+1, 1:ngptlw)  = pinn_lw_taug(pinn_lw_col, 1:nlayers+1, 1:ngptlw)
-          if (pinn_lw_col == 1 .or. pinn_lw_col == 100 .or. pinn_lw_col == size(pinn_lw_taug, 1)) &
-            print *, "[PINN] dbg per-col", pinn_lw_col, "taug(k=1,ig=1) =", taug(1,1), " fracs(1,1) =", fracs(1,1)
+          if (pinn_lw_col == 1 .or. pinn_lw_col == 100 .or. pinn_lw_col == size(pinn_lw_taug, 1)) then
+            print *, "[PINN] dbg per-col", pinn_lw_col, "taug(k1,ig1)=", taug(1,1), " taug(kN,ig1)=", taug(nlayers+1,1), " fracs(1,1)=", fracs(1,1)
+            if (pinn_lw_dbg) then
+              print *, "[PINN] CMP col", pinn_lw_col, " max|dtaug|=", maxval(abs(taug - pinn_dbg_taug)), &
+                " max|dfracs|=", maxval(abs(fracs - pinn_dbg_fracs))
+              print *, "[PINN] CMP col", pinn_lw_col, " ref taug(k1,kN,ig1)=", pinn_dbg_taug(1,1), pinn_dbg_taug(nlayers+1,1), &
+                " pinn=", taug(1,1), taug(nlayers+1,1), " ref fracs(1,1)=", pinn_dbg_fracs(1,1), " pinn=", fracs(1,1)
+            end if
+          end if
         else
           call taumol_ref(nlayers, pavel, wx, coldry, &
                           laytrop, jp, jt, jt1, planklay, planklev, plankbnd, &

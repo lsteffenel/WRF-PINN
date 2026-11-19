@@ -15,8 +15,10 @@
       logical :: pinn_sw_on = .false.
       logical :: pinn_sw_ok = .false.
       logical :: pinn_sw_init_done = .false.
+      logical :: pinn_sw_dbg = .false.
       integer(im) :: pinn_sw_col = 0
       real(4), allocatable :: pinn_sw_taug(:, :, :), pinn_sw_taur(:, :, :)  ! (ncol, nlay, ngptsw)
+      real(rb), allocatable :: pinn_dbg_taug(:,:), pinn_dbg_taur(:,:)  ! copie taumol_sw_ref (PINN_DEBUG_CMP=1)
       interface
         function c_pinn_init(m) result(ok) bind(C, name="pinn_torch_init")
           integer :: ok
@@ -58,6 +60,8 @@
           print *, "[PINN] SW desactive (PINN_SW=0), Fortran taumol_sw"
           return
         end if
+        call get_environment_variable("PINN_DEBUG_CMP", fl, status=ios2)
+        if (ios2 == 0 .and. (trim(fl) == "1" .or. trim(fl) == "on")) pinn_sw_dbg = .true.
         l = len_trim(m)
         mc = achar(0)
         mc(1:l) = m(1:l)
@@ -196,8 +200,10 @@
         print *, "[PINN] sw TILE taug min/max:", minval(pinn_sw_taug), maxval(pinn_sw_taug), " taur min/max:", minval(pinn_sw_taur), maxval(pinn_sw_taur)
         print *, "[PINN] dbg sw tile col1 feat: play,plev1,plevtop,tlay,tlev,h2o,o3,tsfc =", &
           play(1,1), plev(1,1), plev(1,nlay+1), tlay(1,1), tlev(1,1), h2o(1,1), o3(1,1), tsfc(1)
-        print *, "[PINN] dbg sw tile taug(k=1,ig=1) col1/100/ncol =", &
-          pinn_sw_taug(1,1,1), pinn_sw_taug(min(100,ncol),1,1), pinn_sw_taug(ncol,1,1)
+        print *, "[PINN] dbg sw tile col1/100/ncol: taug(k1,ig1) taug(kN,ig1) taur(k1,ig1) =", &
+          pinn_sw_taug(1,1,1), pinn_sw_taug(1,nlay,1), pinn_sw_taur(1,1,1), &
+          pinn_sw_taug(min(100,ncol),1,1), pinn_sw_taug(min(100,ncol),nlay,1), pinn_sw_taur(min(100,ncol),1,1), &
+          pinn_sw_taug(ncol,1,1), pinn_sw_taug(ncol,nlay,1), pinn_sw_taur(ncol,1,1)
         deallocate(play, plev, tlay, tlev, tsfc, h2o, o3, c2, c4, n2, o22, o3mmr)
       end subroutine pinn_precompute_sw_tile
       subroutine taumol_sw(nlayers, colh2o, colco2, colch4, colo2, colo3, colmol, &
@@ -210,14 +216,32 @@
         real(rb), intent(in) :: fac00(:), fac01(:), fac10(:), fac11(:)
         real(rb), intent(in) :: selffac(:), selffrac(:), forfac(:), forfrac(:)
         real(rb), intent(out) :: sfluxzen(:), taug(:,:), taur(:,:)
+        logical :: use_pinn
         pinn_sw_col = pinn_sw_col + 1
+        use_pinn = pinn_sw_on .and. pinn_sw_ok .and. pinn_sw_col <= size(pinn_sw_taug, 1)
         call taumol_sw_ref(nlayers, colh2o, colco2, colch4, colo2, colo3, colmol, &
                            laytrop, jp, jt, jt1, fac00, fac01, fac10, fac11, &
                            selffac, selffrac, indself, forfac, forfrac, indfor, &
                            sfluxzen, taug, taur)
-        if (pinn_sw_on .and. pinn_sw_ok .and. pinn_sw_col <= size(pinn_sw_taug, 1)) then
+        if (pinn_sw_dbg .and. use_pinn) then
+          if (.not. allocated(pinn_dbg_taug)) then
+            allocate(pinn_dbg_taug(size(taug,1), size(taug,2)), pinn_dbg_taur(size(taur,1), size(taur,2)))
+          end if
+          pinn_dbg_taug = taug
+          pinn_dbg_taur = taur
+        end if
+        if (use_pinn) then
           taug(1:nlayers, 1:ngptsw) = pinn_sw_taug(pinn_sw_col, 1:nlayers, 1:ngptsw)
           taur(1:nlayers, 1:ngptsw) = pinn_sw_taur(pinn_sw_col, 1:nlayers, 1:ngptsw)
+          if (pinn_sw_col == 1 .or. pinn_sw_col == 100 .or. pinn_sw_col == size(pinn_sw_taug, 1)) then
+            print *, "[PINN] dbg sw per-col", pinn_sw_col, "taug(k1,ig1)=", taug(1,1), " taug(kN,ig1)=", taug(nlayers,1), " taur(1,1)=", taur(1,1)
+            if (pinn_sw_dbg) then
+              print *, "[PINN] CMP sw col", pinn_sw_col, " max|dtaug|=", maxval(abs(taug - pinn_dbg_taug)), &
+                " max|dtaur|=", maxval(abs(taur - pinn_dbg_taur))
+              print *, "[PINN] CMP sw col", pinn_sw_col, " ref taug(k1,kN,ig1)=", pinn_dbg_taug(1,1), pinn_dbg_taug(nlayers,1), &
+                " pinn=", taug(1,1), taug(nlayers,1), " ref taur(1,1)=", pinn_dbg_taur(1,1), " pinn=", taur(1,1)
+            end if
+          end if
         end if
       end subroutine taumol_sw
       end module module_pinn_shell_sw
